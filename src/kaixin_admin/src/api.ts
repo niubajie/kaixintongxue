@@ -29,6 +29,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  login: (account: string, password: string) =>
+    request<{ message: string; user: Profile }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ account, password })
+    }),
+
+  logout: () => request<{ message: string }>("/api/auth/logout", { method: "POST" }),
+
   me: async (): Promise<Profile | null> => {
     try {
       const data = await request<{ user: Profile }>("/api/auth/me");

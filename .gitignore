@@ -1,9 +1,13 @@
-# 仓库收录四端前端：桌面客户端、网页端、手机端、平板端（同一母版）
-# 服务端与旧 WPF 工程保留在本地
+# 仓库收录前端四端与管理后台（TypeScript），以及 Go 服务端
+# 旧 Python 服务端与旧 WPF 工程保留在本地
 /src/KaixinAssistant/
 /src/kaixin_server_py/
 /tools/
 /.legacy-git/
+
+# Go 服务端运行数据与可执行文件
+/src/kaixin_server_go/server-data/
+/src/kaixin_server_go/*.exe
 
 # 前端依赖与构建产物
 node_modules/

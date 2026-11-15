@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "./api";
 import type { Profile, Skill } from "./types";
 import { UsersPanel } from "./components/UsersPanel";
@@ -44,12 +44,11 @@ export function App() {
       if (cancelled) {
         return;
       }
+      setLoading(false);
       if (!user) {
-        window.location.href = "/login.html?next=" + encodeURIComponent("/admin.html");
         return;
       }
       setProfile(user);
-      setLoading(false);
       if (user.role === "Owner" || user.role === "Admin") {
         await loadSkills();
       }
@@ -60,16 +59,34 @@ export function App() {
     };
   }, [loadSkills]);
 
+  const handleLogin = async (account: string, password: string) => {
+    const data = await api.login(account, password);
+    setProfile(data.user);
+    if (data.user.role === "Owner" || data.user.role === "Admin") {
+      await loadSkills();
+    }
+    notify(data.message);
+  };
+
+  const handleLogout = async () => {
+    await api.logout();
+    setProfile(null);
+    setSkills([]);
+  };
+
   if (loading) {
     return <div className="center-hint">正在校验登录状态…</div>;
   }
   if (!profile) {
-    return null;
+    return <LoginPage onLogin={handleLogin} />;
   }
   if (profile.role !== "Owner" && profile.role !== "Admin") {
     return (
       <div className="center-hint">
-        需要管理员账号才能访问该页面。<a href="/login.html">切换账号</a>
+        需要管理员账号才能访问该页面。
+        <button type="button" className="btn ghost small" onClick={handleLogout}>
+          切换账号
+        </button>
       </div>
     );
   }
@@ -89,14 +106,7 @@ export function App() {
             <span className="who">
               {profile.displayName} · {profile.role}
             </span>
-            <button
-              type="button"
-              className="btn small"
-              onClick={async () => {
-                await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-                window.location.href = "/";
-              }}
-            >
+            <button type="button" className="btn small" onClick={handleLogout}>
               退出
             </button>
           </div>
@@ -136,5 +146,68 @@ export function App() {
 
       {toast && <div className="toast">{toast}</div>}
     </>
+  );
+}
+
+interface LoginProps {
+  onLogin: (account: string, password: string) => Promise<void>;
+}
+
+function LoginPage({ onLogin }: LoginProps) {
+  const [account, setAccount] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onLogin(account.trim(), password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "登录失败，请稍后再试。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <form className="login-card" onSubmit={submit}>
+        <div className="login-brand">
+          <span className="brand-mark">开</span>开心同学 AI 助手
+        </div>
+        <h1>管理后台登录</h1>
+        <p className="hint">仅 Owner 与 Admin 账号可进入。</p>
+
+        <div className="field">
+          <label>账号</label>
+          <input
+            type="text"
+            value={account}
+            autoComplete="username"
+            placeholder="管理员账号"
+            onChange={(event) => setAccount(event.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>密码</label>
+          <input
+            type="password"
+            value={password}
+            autoComplete="current-password"
+            placeholder="登录密码"
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+
+        {error && <div className="form-error">{error}</div>}
+
+        <button type="submit" className="btn login-submit" disabled={busy}>
+          {busy ? "登录中…" : "登录"}
+        </button>
+      </form>
+    </div>
   );
 }
