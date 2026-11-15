@@ -1,0 +1,57 @@
+# 本仓库只收录桌面客户端，其余工程保留在本地
+/src/KaixinAssistant/
+/src/kaixin_server_py/
+/tools/
+/.legacy-git/
+
+# 前端依赖与构建产物
+node_modules/
+dist/
+
+# Tauri / Rust 构建产物
+src/kaixin_desktop/src-tauri/target/
+src/kaixin_desktop/src-tauri/gen/
+
+# .NET 构建产物
+bin/
+obj/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地运行数据与日志
+*.log
+*.log.*
+run_out.txt
+crash.out
+crash.err
+app-run.log*
+
+# 临时与测试产物
+cookies.txt
+*.zip
+install.json
+mini-req.json
+pkg-test-*.zip
+
+# 截图与工具临时输出
+.screenshots/
+screenshots/
+
+# IDE / 会话
+.trae/
+.vscode/
+.idea/
+
+# 环境与密钥
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
+
+# 旧工程历史备份
+.legacy-git/

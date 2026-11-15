@@ -1,0 +1,221 @@
+export type PageKey =
+  | "home"
+  | "application"
+  | "goal"
+  | "learning"
+  | "library"
+  | "skills"
+  | "system"
+  | "update"
+  | "history";
+
+export interface AiModelOption {
+  name: string;
+  cost: string;
+  capability: string;
+}
+
+export interface SkillOption {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  demand: number;
+}
+
+export interface TaskItem {
+  id: string;
+  time: string;
+  title: string;
+  detail: string;
+  category: string;
+  tag: string;
+  progress: number;
+}
+
+export interface GoalItem {
+  id: string;
+  title: string;
+  detail: string;
+  deadline: string;
+  progress: number;
+  steps: string[];
+}
+
+export interface DocItem {
+  id: string;
+  title: string;
+  group: string;
+  category: string;
+  type: string;
+  size: string;
+  date: string;
+  summary: string;
+}
+
+export interface HistoryItem {
+  id: string;
+  title: string;
+  time: string;
+  state: string;
+}
+
+export const AI_MODELS: AiModelOption[] = [
+  { name: "MiniCPM-o 4.5", cost: "免费开源，仅自部署硬件成本", capability: "中等，适配电脑维修视觉问答" },
+  { name: "Qwen3-Omni-Flash Realtime", cost: "新用户免费试用额度，超量每千 token 约 0.01-0.03 元", capability: "中强，画面识别速度快" },
+  { name: "豆包实时语音大模型", cost: "付费，每千 token 约 0.02-0.05 元", capability: "强，维修场景逻辑适配好" },
+  { name: "火山引擎方舟实时方案", cost: "付费，按分钟约 0.1-0.2 元或 token 计费", capability: "强，主板元件识别精准" },
+  { name: "OpenAI Realtime API", cost: "付费，每千 token 约 0.15 美元起", capability: "顶尖，推理能力强但成本高" },
+  { name: "Gemini Live API", cost: "付费，按会话时长约 0.2 美元 / 分钟起", capability: "顶尖，视觉细节表现突出" }
+];
+
+export const SKILLS: SkillOption[] = [
+  { id: "kb", name: "知识库问答", description: "把本地文档接入问答，随时检索工作资料", icon: "知", demand: 2 },
+  { id: "office", name: "办公自动化", description: "自动整理文档、表格与周报草稿", icon: "办", demand: 2 },
+  { id: "repair", name: "电脑维修视觉问答", description: "摄像头识别主板与元件，给出维修建议", icon: "维", demand: 3 },
+  { id: "voice", name: "实时语音对话", description: "低延迟语音交互，边说边执行任务", icon: "语", demand: 3 },
+  { id: "image", name: "本地图片生成", description: "离线生成配图与封面草稿", icon: "图", demand: 4 },
+  { id: "code", name: "代码辅助", description: "读写本地项目，生成与修改代码", icon: "码", demand: 3 },
+  { id: "data", name: "数据分析", description: "清洗数据并生成图表与结论", icon: "数", demand: 2 },
+  { id: "study", name: "学习陪练", description: "制定学习计划并每日陪练复盘", icon: "学", demand: 1 }
+];
+
+export const HARDWARE = [
+  { label: "处理器", value: "i7-12700" },
+  { label: "内存", value: "32 GB" },
+  { label: "显卡", value: "RTX 3060 12G" },
+  { label: "硬盘", value: "1 TB SSD" }
+];
+
+export const TASKS: TaskItem[] = [
+  { id: "t1", time: "09:00", title: "整理需求清单", detail: "汇总本周新增的 AI 技能需求，标注优先级", category: "工作任务", tag: "今天", progress: 100 },
+  { id: "t2", time: "10:30", title: "知识库资料清洗", detail: "把 12 份 PDF 转为可检索文本", category: "工作任务", tag: "今天", progress: 60 },
+  { id: "t3", time: "14:00", title: "生成周报草稿", detail: "基于本周任务记录生成周报初稿", category: "工作任务", tag: "今天", progress: 30 },
+  { id: "t4", time: "16:30", title: "学习提示词模板", detail: "完成 3 个提示词模板练习", category: "学习任务", tag: "今天", progress: 0 }
+];
+
+export const GOALS: GoalItem[] = [
+  {
+    id: "g1",
+    title: "搭建个人 AI 知识库",
+    detail: "把 30 份工作文档整理进知识库，支持问答检索",
+    deadline: "11 月 30 日",
+    progress: 35,
+    steps: ["整理文档清单", "清洗与分类", "导入知识库", "验证问答效果"]
+  },
+  {
+    id: "g2",
+    title: "每周自动生成工作周报",
+    detail: "每周五汇总任务与产出，输出周报草稿",
+    deadline: "每周五",
+    progress: 60,
+    steps: ["连接任务记录", "定义周报模板", "定时生成草稿"]
+  },
+  {
+    id: "g3",
+    title: "学会用 AI 做数据分析",
+    detail: "掌握数据清洗、图表生成与结论输出",
+    deadline: "12 月 20 日",
+    progress: 15,
+    steps: ["准备示例数据", "练习提问模板", "产出第一份分析"]
+  },
+  {
+    id: "g4",
+    title: "英语口语每日练习",
+    detail: "每天 15 分钟，AI 陪练并纠正发音",
+    deadline: "长期",
+    progress: 80,
+    steps: ["选择话题库", "每日打卡", "月度复盘"]
+  }
+];
+
+export const CATEGORY_GROUPS = [
+  {
+    name: "工作资料",
+    count: "46 份",
+    icon: "工",
+    children: [
+      { name: "需求文档", count: "18 份" },
+      { name: "项目周报", count: "14 份" },
+      { name: "方案设计", count: "9 份" },
+      { name: "合同资料", count: "5 份" }
+    ]
+  },
+  {
+    name: "学习资料",
+    count: "32 份",
+    icon: "学",
+    children: [
+      { name: "AI 课程", count: "12 份" },
+      { name: "提示词模板", count: "9 份" },
+      { name: "读书笔记", count: "11 份" }
+    ]
+  },
+  {
+    name: "健康资料",
+    count: "18 份",
+    icon: "健",
+    children: [
+      { name: "运动记录", count: "8 份" },
+      { name: "体检报告", count: "4 份" },
+      { name: "饮食计划", count: "6 份" }
+    ]
+  },
+  {
+    name: "生活资料",
+    count: "20 份",
+    icon: "生",
+    children: [
+      { name: "家庭账单", count: "9 份" },
+      { name: "旅行计划", count: "5 份" },
+      { name: "购物清单", count: "6 份" }
+    ]
+  },
+  {
+    name: "娱乐资料",
+    count: "12 份",
+    icon: "娱",
+    children: [
+      { name: "影视清单", count: "5 份" },
+      { name: "音乐收藏", count: "4 份" },
+      { name: "游戏攻略", count: "3 份" }
+    ]
+  }
+];
+
+export const DOCS: DocItem[] = [
+  { id: "d1", title: "开心同学 AI 助手需求说明", group: "工作资料", category: "需求文档", type: "Markdown", size: "128 KB", date: "11-13", summary: "页面原型阶段的需求拆解，包含两种方案模式与部署流程说明。" },
+  { id: "d2", title: "2026 年 Q4 第 45 周工作周报", group: "工作资料", category: "项目周报", type: "Word", size: "86 KB", date: "11-12", summary: "本周完成页面原型与部署演示，下周进入功能实现阶段。" },
+  { id: "d3", title: "页面原型与交互方案设计", group: "工作资料", category: "方案设计", type: "PDF", size: "1.8 MB", date: "11-11", summary: "首页、设置页与部署流程的交互说明与视觉规范。" },
+  { id: "d4", title: "本地大模型部署手册", group: "学习资料", category: "AI 课程", type: "PDF", size: "2.4 MB", date: "11-10", summary: "Ollama 与 AnythingLLM 的安装、模型选择与常见故障排查。" },
+  { id: "d5", title: "提示词模板合集", group: "学习资料", category: "提示词模板", type: "Markdown", size: "64 KB", date: "11-08", summary: "整理 18 个常用提示词模板，覆盖写作、分析与编程场景。" },
+  { id: "d6", title: "数据分析入门笔记", group: "学习资料", category: "读书笔记", type: "Markdown", size: "38 KB", date: "11-04", summary: "数据清洗、可视化与结论输出的基础方法。" },
+  { id: "d7", title: "11 月体检报告", group: "健康资料", category: "体检报告", type: "PDF", size: "1.2 MB", date: "11-09", summary: "血常规、肝肾功能与视力检查结果汇总。" },
+  { id: "d8", title: "每周运动记录", group: "健康资料", category: "运动记录", type: "Excel", size: "46 KB", date: "11-13", summary: "近 8 周跑步与力量训练的距离、时长与心率统计。" },
+  { id: "d9", title: "家庭月度账单", group: "生活资料", category: "家庭账单", type: "Excel", size: "92 KB", date: "11-12", summary: "10 月家庭收支明细与分类占比统计。" },
+  { id: "d10", title: "周末短途旅行计划", group: "生活资料", category: "旅行计划", type: "Word", size: "33 KB", date: "11-07", summary: "两天一夜行程、住宿与预算安排。" },
+  { id: "d11", title: "年度观影清单", group: "娱乐资料", category: "影视清单", type: "Markdown", size: "28 KB", date: "11-05", summary: "2026 年已看影片评分与待看片单。" },
+  { id: "d12", title: "游戏攻略合集", group: "娱乐资料", category: "游戏攻略", type: "Markdown", size: "52 KB", date: "11-03", summary: "主线任务流程与隐藏要素收集提示。" }
+];
+
+export const HISTORY: HistoryItem[] = [
+  { id: "h1", title: "电脑维修视觉问答方案", time: "今天 14:30", state: "已完成" },
+  { id: "h2", title: "搭建个人 AI 知识库", time: "昨天 16:20", state: "进行中" },
+  { id: "h3", title: "每周自动生成工作周报", time: "11 月 13 日 09:15", state: "已完成" }
+];
+
+export const RECENT_QUESTIONS = [
+  "最近7天，短视频都在流行什么",
+  "把开箱流程整理成 SOP 清单",
+  "第一次用 AI 办公，可以先做哪3件事",
+  "10个主流 AI 模型该怎么选"
+];
+
+export const PERMISSIONS = [
+  { resource: "问答与技能运行", owner: "可读写", member: "可读写", guest: "只读" },
+  { resource: "目标与任务数据", owner: "全部成员", member: "仅本人", guest: "只读" },
+  { resource: "本地资料文档", owner: "可读写", member: "可读写", guest: "只读" },
+  { resource: "成员与权限管理", owner: "可管理", member: "不可", guest: "不可" },
+  { resource: "软件安装与系统设置", owner: "可管理", member: "不可", guest: "不可" },
+  { resource: "数据库备份与恢复", owner: "可管理", member: "不可", guest: "不可" }
+];
