@@ -55,3 +55,9 @@ screenshots/
 
 # 旧工程历史备份
 .legacy-git/
+
+# ---- 构建产物（由 fix 脚本追加）----
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo
+
