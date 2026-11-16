@@ -15,12 +15,26 @@ export interface AiModelOption {
   capability: string;
 }
 
+export interface SkillMatch {
+  text: string;
+  softwareId: string;
+  software: string;
+  reasons: string[];
+  siteId?: string;
+  site?: string;
+  siteUrl?: string;
+}
+
 export interface SkillOption {
   id: string;
   name: string;
   description: string;
   icon: string;
   demand: number;
+  /** 技能内容，一行一条；自定义技能也保存在这里。 */
+  content?: string;
+  /** 「配置ai软件」的匹配结果，用于生成方案。 */
+  matches?: SkillMatch[];
 }
 
 export interface TaskItem {
@@ -70,14 +84,34 @@ export const AI_MODELS: AiModelOption[] = [
 ];
 
 export const SKILLS: SkillOption[] = [
-  { id: "kb", name: "知识库问答", description: "把本地文档接入问答，随时检索工作资料", icon: "知", demand: 2 },
-  { id: "office", name: "办公自动化", description: "自动整理文档、表格与周报草稿", icon: "办", demand: 2 },
-  { id: "repair", name: "电脑维修视觉问答", description: "摄像头识别主板与元件，给出维修建议", icon: "维", demand: 3 },
-  { id: "voice", name: "实时语音对话", description: "低延迟语音交互，边说边执行任务", icon: "语", demand: 3 },
-  { id: "image", name: "本地图片生成", description: "离线生成配图与封面草稿", icon: "图", demand: 4 },
-  { id: "code", name: "代码辅助", description: "读写本地项目，生成与修改代码", icon: "码", demand: 3 },
-  { id: "data", name: "数据分析", description: "清洗数据并生成图表与结论", icon: "数", demand: 2 },
-  { id: "study", name: "学习陪练", description: "制定学习计划并每日陪练复盘", icon: "学", demand: 1 }
+  {
+    id: "shortvideo",
+    name: "商品的短视频制作",
+    description: "商品图片/视频采集、剪辑、审核与定时发布",
+    icon: "短",
+    demand: 3,
+    content: `1、指定平台
+2、获取所有商家图片的功能；
+3、获取某个商品每周、每月前10销量的功能；
+4、获取商品视频中指定属性图片的功能；
+5、获取商品月销量的功能；
+6、获取本周新上商品的功能；
+7、获取本月销量大于100的功能；
+8、获取最近3个月销量大于1000的功能；
+9、获取包含指定内容的图片；
+10、获取视频中指定内容的图片，自动剪辑图片的功能。要求：要尽量显示在图片的70%的范围内。制作好的图片需要审核，通过审查就可以保存并发布到抖音上；没通过的，手动删除或者重新提要求重做；
+11、商品图片转为视频，时长5秒，每个商品至少3张图片，少于则放弃此商品制作视频。制作好的视频需要提醒和待审查，通过审查就可以保存并发布到平台上；没通过的，手动删除或者重新提要求重做。图片制作视频：第一张图片左右旋转15度，第二张图片上下旋转15度，第三张图片做局部动作；
+12、可定时发布视频到账号；
+13、每天分三次做抖音短视频的播放记录：包含上线时长、播放量、点赞量、评论量以及评论。每一条前面可以打勾选择，可以增加可选功能，也可以删除其中一个或者多个功能。`
+  },
+  { id: "kb", name: "知识库问答", description: "把本地文档接入问答，随时检索工作资料", icon: "知", demand: 2, content: "本地离线大模型问答，检索工作资料" },
+  { id: "office", name: "办公自动化", description: "自动整理文档、表格与周报草稿", icon: "办", demand: 2, content: "用大模型写作周报草稿并总结文档" },
+  { id: "repair", name: "电脑维修视觉问答", description: "摄像头识别主板与元件，给出维修建议", icon: "维", demand: 3, content: "用大模型问答给出维修建议" },
+  { id: "voice", name: "实时语音对话", description: "低延迟语音交互，边说边执行任务", icon: "语", demand: 3, content: "语音识别转成文字，再用大模型问答" },
+  { id: "image", name: "本地图片生成", description: "离线生成配图与封面草稿", icon: "图", demand: 4, content: "离线生成图片与封面" },
+  { id: "code", name: "代码辅助", description: "读写本地项目，生成与修改代码", icon: "码", demand: 3, content: "用大模型辅助写作代码" },
+  { id: "data", name: "数据分析", description: "清洗数据并生成图表与结论", icon: "数", demand: 2, content: "用大模型总结数据并给出结论" },
+  { id: "study", name: "学习陪练", description: "制定学习计划并每日陪练复盘", icon: "学", demand: 1, content: "用大模型批改作文并总结错题" }
 ];
 
 export const HARDWARE = [

@@ -1,0 +1,89 @@
+[
+  {
+    "id": "ollama",
+    "name": "Ollama",
+    "kind": "runtime",
+    "license": "MIT",
+    "capabilities": ["本地大模型", "离线问答"],
+    "keywords": ["大模型", "本地模型", "离线", "私有部署", "问答", "写作", "文案", "总结", "翻译", "批改", "作文", "聊天", "润色"],
+    "sizeMb": 800,
+    "requires": [],
+    "minMemoryGb": 8,
+    "minVramGb": 0,
+    "install": {
+      "type": "portable-zip",
+      "sources": [
+        "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip"
+      ],
+      "fallback": "https://ollama.com/download/windows",
+      "sha256": ""
+    },
+    "verify": { "command": "ollama.exe --version" },
+    "note": "本地大模型运行时，便携解压即可使用"
+  },
+  {
+    "id": "qwen2.5-7b",
+    "name": "Qwen2.5 7B",
+    "kind": "model",
+    "license": "Qwen (Apache-2.0 compatible)",
+    "capabilities": ["本地大模型"],
+    "keywords": ["大模型", "离线", "问答", "写作", "文案", "总结", "翻译", "批改", "作文"],
+    "sizeMb": 4700,
+    "requires": ["ollama"],
+    "minMemoryGb": 16,
+    "minVramGb": 8,
+    "install": {
+      "type": "cli",
+      "sources": ["https://ollama.com/library/qwen2.5:7b"],
+      "fallback": "https://ollama.com/library/qwen2.5:7b",
+      "command": "ollama.exe pull qwen2.5:7b"
+    },
+    "verify": { "command": "ollama.exe list" },
+    "note": "通义千问本地模型，依赖 Ollama，建议显存 8 GB 以上"
+  },
+  {
+    "id": "ffmpeg",
+    "name": "FFmpeg",
+    "kind": "tool",
+    "license": "LGPL-2.1-or-later",
+    "capabilities": ["视频", "音频", "格式转换"],
+    "keywords": ["剪辑", "转码", "压缩", "拼接", "截取", "合并", "水印", "GIF", "gif", "变速", "旋转", "帧"],
+    "sizeMb": 120,
+    "requires": [],
+    "minMemoryGb": 0,
+    "minVramGb": 0,
+    "install": {
+      "type": "portable-zip",
+      "sources": [
+        "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+      ],
+      "fallback": "https://ffmpeg.org/download.html",
+      "sha256": ""
+    },
+    "verify": { "command": "ffmpeg.exe -version" },
+    "note": "视频/音频剪辑与转码工具"
+  },
+  {
+    "id": "whisper",
+    "name": "Whisper.cpp",
+    "kind": "tool",
+    "license": "MIT",
+    "capabilities": ["语音", "语音转文字"],
+    "keywords": ["语音", "字幕", "听写", "录音", "转文字", "转成文字", "旁白", "识别"],
+    "sizeMb": 60,
+    "requires": [],
+    "minMemoryGb": 0,
+    "minVramGb": 0,
+    "install": {
+      "type": "portable-zip",
+      "sources": [
+        "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.0/whisper-bin-x64.zip"
+      ],
+      "fallback": "https://github.com/ggml-org/whisper.cpp/releases",
+      "sha256": ""
+    },
+    "verify": { "command": "whisper-cli.exe --help" },
+    "note": "本地语音识别，模型文件需另行下载"
+  }
+]

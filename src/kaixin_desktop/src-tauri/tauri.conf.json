@@ -9,24 +9,8 @@
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
-  "app": {
-    "windows": [
-      {
-        "title": "开心同学 AI 助手",
-        "width": 1120,
-        "height": 720,
-        "minWidth": 960,
-        "minHeight": 620,
-        "decorations": false,
-        "resizable": true,
-        "center": true
-      }
-    ],
-    "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:8080 ipc: http://ipc.localhost; frame-src 'none'; object-src 'none'"
-    }
-  },
   "bundle": {
+    "externalBin": ["binaries/kaixin-local"],
     "active": true,
     "targets": ["nsis"],
     "icon": [
@@ -43,6 +27,23 @@
       "nsis": {
         "installMode": "currentUser"
       }
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "开心同学 AI 助手",
+        "width": 1120,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 620,
+        "decorations": false,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* ipc: http://ipc.localhost; frame-src 'none'; object-src 'none'"
     }
   }
 }

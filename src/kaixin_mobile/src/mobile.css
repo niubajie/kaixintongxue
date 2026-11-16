@@ -1094,8 +1094,128 @@ textarea {
 }
 
 .skill-row.active {
-  border-color: #cfe4d6;
-  background: #fbfdfb;
+  border-color: #2f6fdb;
+  background: #f3f7ff;
+  box-shadow: 0 0 0 1px #2f6fdb inset;
+}
+
+.skill-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 18px 2px 8px;
+}
+
+.skill-tools .section-label {
+  margin: 0;
+}
+
+.mini-btn {
+  border: 1px solid #2f6fdb;
+  border-radius: 999px;
+  background: #fff;
+  color: #2f6fdb;
+  padding: 5px 12px;
+  font-size: 12px;
+  flex: none;
+}
+
+.mini-btn:active {
+  background: #eef3ff;
+}
+
+.skill-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.skill-edit-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  color: #2f6fdb;
+}
+
+.plan-warning {
+  margin-top: 10px;
+  border: 1px solid #f0c36d;
+  border-radius: 10px;
+  background: #fff8ec;
+  color: #8a5a00;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.plan-error {
+  margin: 10px 0;
+  border: 1px solid #e7aaaa;
+  border-radius: 10px;
+  background: #fff2f2;
+  color: #a33131;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.plan-step {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fafaf8;
+  padding: 9px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.plan-order {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.plan-name {
+  font-weight: 600;
+}
+
+.plan-url {
+  flex-basis: 100%;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.match-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.match-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fafaf8;
+  padding: 9px 12px;
+}
+
+.match-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.match-text {
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .skill-icon {

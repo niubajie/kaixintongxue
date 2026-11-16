@@ -1,0 +1,82 @@
+[
+  {
+    "id": "douyin",
+    "name": "抖音",
+    "keywords": ["抖音", "douyin"],
+    "url": "https://www.douyin.com",
+    "loginUrl": "https://www.douyin.com/",
+    "note": "发布视频、读取播放数据前需登录抖音账号"
+  },
+  {
+    "id": "xiaohongshu",
+    "name": "小红书",
+    "keywords": ["小红书", "xiaohongshu"],
+    "url": "https://www.xiaohongshu.com",
+    "loginUrl": "https://www.xiaohongshu.com/",
+    "note": "发布笔记前需登录小红书账号"
+  },
+  {
+    "id": "bilibili",
+    "name": "哔哩哔哩",
+    "keywords": ["哔哩哔哩", "B站", "bilibili"],
+    "url": "https://www.bilibili.com",
+    "loginUrl": "https://passport.bilibili.com/login",
+    "note": "投稿视频前需登录 B 站账号"
+  },
+  {
+    "id": "wechat-mp",
+    "name": "微信公众号",
+    "keywords": ["微信公众号", "公众号", "微信"],
+    "url": "https://mp.weixin.qq.com",
+    "loginUrl": "https://mp.weixin.qq.com/",
+    "note": "发布图文前需扫码登录公众号后台"
+  },
+  {
+    "id": "weibo",
+    "name": "微博",
+    "keywords": ["微博", "weibo"],
+    "url": "https://weibo.com",
+    "loginUrl": "https://weibo.com/login.php",
+    "note": "发布微博前需登录微博账号"
+  },
+  {
+    "id": "kuaishou",
+    "name": "快手",
+    "keywords": ["快手", "kuaishou"],
+    "url": "https://www.kuaishou.com",
+    "loginUrl": "https://www.kuaishou.com/",
+    "note": "发布作品前需登录快手账号"
+  },
+  {
+    "id": "zhihu",
+    "name": "知乎",
+    "keywords": ["知乎", "zhihu"],
+    "url": "https://www.zhihu.com",
+    "loginUrl": "https://www.zhihu.com/signin",
+    "note": "发布回答或文章前需登录知乎账号"
+  },
+  {
+    "id": "youtube",
+    "name": "YouTube",
+    "keywords": ["YouTube", "youtube", "油管"],
+    "url": "https://www.youtube.com",
+    "loginUrl": "https://accounts.google.com/",
+    "note": "上传视频前需登录 Google 账号"
+  },
+  {
+    "id": "taobao",
+    "name": "淘宝",
+    "keywords": ["淘宝", "天猫", "taobao"],
+    "url": "https://www.taobao.com",
+    "loginUrl": "https://login.taobao.com/",
+    "note": "读取店铺数据前需登录淘宝账号"
+  },
+  {
+    "id": "jd",
+    "name": "京东",
+    "keywords": ["京东", "jd.com"],
+    "url": "https://www.jd.com",
+    "loginUrl": "https://passport.jd.com/new/login.aspx",
+    "note": "读取店铺数据前需登录京东账号"
+  }
+]

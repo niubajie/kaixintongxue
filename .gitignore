@@ -8,6 +8,7 @@
 # Go 服务端运行数据与可执行文件
 /src/kaixin_server_go/server-data/
 /src/kaixin_server_go/*.exe
+/src/kaixin_local_go/*.exe
 
 # 前端依赖与构建产物
 node_modules/
@@ -16,6 +17,9 @@ dist/
 # Tauri / Rust 构建产物
 src/kaixin_desktop/src-tauri/target/
 src/kaixin_desktop/src-tauri/gen/
+
+# Tauri sidecar 二进制（由 src/kaixin_local_go 编译生成，不入库）
+src/kaixin_desktop/src-tauri/binaries/
 
 # .NET 构建产物
 bin/
