@@ -99,6 +99,15 @@ pub fn run() {
     install_panic_hook();
 
     tauri::Builder::default()
+        // 单实例插件必须最先注册：第二次启动时不再开新进程，而是聚焦已有窗口。
+        // 否则两个实例会各自拉起 sidecar、抢占同一个本地端口，用户只会看到"打不开"。
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let handle = app.handle().clone();
