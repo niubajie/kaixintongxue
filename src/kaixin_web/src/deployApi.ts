@@ -68,12 +68,21 @@ export interface PlanSiteAuth {
   authorized: boolean;
 }
 
+// 「AI 技能 + 硬件配置」模式按所选技能反推的推荐硬件。
+export interface HardwareRecommendation {
+  minMemoryGb: number;
+  minVramGb: number;
+  needDiskGb: number;
+  items: string[];
+}
+
 export interface DeployPlan {
   steps: PlanStep[];
   authSteps: PlanSiteAuth[];
   totalSizeMb: number;
   estimatedMinutes: number;
   warnings: string[];
+  recommendation?: HardwareRecommendation;
 }
 
 export interface DeployStepStatus {
@@ -137,8 +146,10 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 20000): 
   }
 }
 
-export async function fetchHardware(): Promise<HardwareInfo> {
-  const payload = await request<{ hardware: HardwareInfo }>("/api/system/hardware", undefined, 30000);
+// refresh=true 时跳过服务端缓存强制重新检测（用于「重新检测」按钮）。
+export async function fetchHardware(refresh = false): Promise<HardwareInfo> {
+  const path = refresh ? "/api/system/hardware?refresh=1" : "/api/system/hardware";
+  const payload = await request<{ hardware: HardwareInfo }>(path, undefined, 60000);
   return payload.hardware;
 }
 
@@ -156,11 +167,12 @@ export function fetchCatalog(): Promise<SoftwareEntry[]> {
 export function buildPlan(
   skills: SkillSelection[],
   extraSoftwareIds: string[],
-  siteIds: string[] = []
+  siteIds: string[] = [],
+  mode: "existing" | "upgrade" = "existing"
 ): Promise<DeployPlan> {
   return request<DeployPlan>("/api/deploy/plan", {
     method: "POST",
-    body: JSON.stringify({ skills, extraSoftwareIds, siteIds })
+    body: JSON.stringify({ skills, extraSoftwareIds, siteIds, mode })
   }, 40000);
 }
 

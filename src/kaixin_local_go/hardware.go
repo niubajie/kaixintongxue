@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -151,12 +152,54 @@ var runHardwareScript = func(ctx context.Context) ([]byte, error) {
 	return cmd.Output()
 }
 
+// 硬件信息在进程内缓存：WMI 检测冷启动可能耗时十几秒，
+// 缓存后前端打开技能部署页可以立刻拿到结果，不必每次都看「检测中」。
+const hardwareCacheTTL = 10 * time.Minute
+
+var hardwareCache struct {
+	mu   sync.Mutex // 同时只允许一次检测，其它请求排队等结果，避免重复拉起 PowerShell
+	info *HardwareInfo
+	at   time.Time
+}
+
+// hardwareSnapshot：命中缓存直接返回；refresh=true 时强制重新检测。
+func hardwareSnapshot(ctx context.Context, refresh bool) (*HardwareInfo, bool, error) {
+	hardwareCache.mu.Lock()
+	defer hardwareCache.mu.Unlock()
+	if !refresh && hardwareCache.info != nil && time.Since(hardwareCache.at) < hardwareCacheTTL {
+		return hardwareCache.info, true, nil
+	}
+	info, err := detectHardware(ctx)
+	if err != nil {
+		// 检测失败时保留旧结果，至少让前端还能显示上次读到的配置。
+		if hardwareCache.info != nil && time.Since(hardwareCache.at) < hardwareCacheTTL {
+			return hardwareCache.info, true, nil
+		}
+		return nil, false, err
+	}
+	hardwareCache.info = info
+	hardwareCache.at = time.Now()
+	return info, false, nil
+}
+
+// warmHardwareCache 在服务启动后后台预热一次，避免用户第一次打开页面时干等。
+func warmHardwareCache() {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, _, _ = hardwareSnapshot(ctx, false)
+	}()
+}
+
 func (a *App) handleHardware(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	info, err := detectHardware(r.Context())
+	refresh := r.URL.Query().Get("refresh") == "1"
+	info, cached, err := hardwareSnapshot(r.Context(), refresh)
 	if err != nil {
 		fail(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hardware": info, "elapsedMs": time.Since(start).Milliseconds()})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"hardware": info, "elapsedMs": time.Since(start).Milliseconds(), "cached": cached,
+	})
 }

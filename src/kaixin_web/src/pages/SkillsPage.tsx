@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePersistentState } from "../assistant";
-import { SKILLS, type SkillOption } from "../data";
+import { HARDWARE_TIERS, SKILLS, type SkillOption } from "../data";
 import {
   buildPlan,
   confirmSiteAuth,
@@ -93,6 +93,9 @@ function pendingHint(step: DeployStepStatus): string {
 
 export function SkillsPage({ onNotice }: Props) {
   const [mode, setMode] = useState<"existing" | "upgrade">("existing");
+  // 「AI 技能 + 硬件配置」的价格节点：档位下标 + 全新/旧配件价格口径。
+  const [tierIndex, setTierIndex] = useState(3);
+  const [newPrice, setNewPrice] = useState(true);
   const [skills, setSkills] = usePersistentState<SkillOption[]>("kaixin.skills.v2", SKILLS);
   const [selected, setSelected] = useState<string[]>(["kb", "office"]);
   const [supplement, setSupplement] = useState("");
@@ -126,11 +129,11 @@ export function SkillsPage({ onNotice }: Props) {
   const [authSite, setAuthSite] = useState<PlanSiteAuth | null>(null);
   const [starting, setStarting] = useState(false);
 
-  const detect = useCallback(async () => {
+  const detect = useCallback(async (refresh = false) => {
     setHwState("detecting");
     setHwError("");
     try {
-      const info = await fetchHardware();
+      const info = await fetchHardware(refresh);
       setHardware(info);
       setHwState("ready");
     } catch (error) {
@@ -290,7 +293,8 @@ export function SkillsPage({ onNotice }: Props) {
     setPlan(null);
   };
 
-  const generate = async () => {
+  // modeOverride 用于切换模式时立即按新模式生成，避免读到旧的 mode 状态。
+  const generate = async (modeOverride?: "existing" | "upgrade") => {
     if (selected.length === 0) {
       const message = "请至少选择一项技能，再生成方案。";
       setPlanError(message);
@@ -317,7 +321,7 @@ export function SkillsPage({ onNotice }: Props) {
         const ids = [...new Set((matches ?? []).filter((line) => line.softwareId).map((line) => line.softwareId))];
         selections.push({ id: skill.id, name: skill.name, softwareIds: ids });
       }
-      const result = await buildPlan(selections, extraIds, [...siteIds]);
+      const result = await buildPlan(selections, extraIds, [...siteIds], modeOverride ?? mode);
       setPlan(result);
       setJob(null);
       onNotice("方案已生成：已合并重复软件并完成冲突检测。");
@@ -372,6 +376,32 @@ export function SkillsPage({ onNotice }: Props) {
     (left, right) => Number(selected.includes(right.id)) - Number(selected.includes(left.id))
   );
 
+  // 价格节点与技能需求对比：档位能力 ≥ 需求为流畅，差 1 为偏慢，差 2 及以上不建议本机运行。
+  const currentTier = HARDWARE_TIERS[Math.min(tierIndex, HARDWARE_TIERS.length - 1)];
+  const currentPrice = newPrice ? currentTier.newPrice : currentTier.usedPrice;
+  const selectedSkills = skills.filter((skill) => selected.includes(skill.id));
+  const smoothNames = selectedSkills.filter((skill) => currentTier.capability >= skill.demand).map((skill) => skill.name);
+  const moderateNames = selectedSkills.filter((skill) => currentTier.capability === skill.demand - 1).map((skill) => skill.name);
+  const limitedNames = selectedSkills.filter((skill) => currentTier.capability < skill.demand - 1).map((skill) => skill.name);
+  const joinNames = (names: string[]) => (names.length > 0 ? names.join("、") : "无");
+  const smoothSkillsText = selectedSkills.length === 0 ? "尚未选择技能" : joinNames(smoothNames);
+  const moderateSkillsText = selectedSkills.length === 0 ? "—" : joinNames(moderateNames);
+  const limitedSkillsText = selectedSkills.length === 0 ? "—" : joinNames(limitedNames);
+
+  // 滑块位置与价格节点标签中心对齐：第 i 个节点在 (i / (n-1)) 处。
+  const tierPercent = HARDWARE_TIERS.length > 1 ? (tierIndex / (HARDWARE_TIERS.length - 1)) * 100 : 0;
+  const tierSliderRef = useRef<HTMLDivElement>(null);
+  // 点击或拖动滑条时吸附到最近的价格节点。
+  const pickTier = (clientX: number) => {
+    const slider = tierSliderRef.current;
+    if (!slider || HARDWARE_TIERS.length < 2) {
+      return;
+    }
+    const rect = slider.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    setTierIndex(Math.round(ratio * (HARDWARE_TIERS.length - 1)));
+  };
+
   return (
     <div className="page">
       <div className="page-head">
@@ -383,20 +413,21 @@ export function SkillsPage({ onNotice }: Props) {
       </div>
 
       <div className="mode-cards">
-        <button type="button" className={`mode-card${mode === "existing" ? " active" : ""}`} onClick={() => setMode("existing")}>
+        <button type="button" className={`mode-card${mode === "existing" ? " active" : ""}`} onClick={() => { setMode("existing"); setPlan(null); if (selected.length > 0) void generate("existing"); }}>
           <div className="list-card-title">现有电脑 + AI 技能</div>
           <p className="list-card-detail">基于当前硬件配置，选择可运行的 AI 技能</p>
         </button>
-        <button type="button" className={`mode-card${mode === "upgrade" ? " active" : ""}`} onClick={() => setMode("upgrade")}>
+        <button type="button" className={`mode-card${mode === "upgrade" ? " active" : ""}`} onClick={() => { setMode("upgrade"); setPlan(null); if (selected.length > 0) void generate("upgrade"); }}>
           <div className="list-card-title">AI 技能 + 硬件配置</div>
-          <p className="list-card-detail">按所选技能反推推荐硬件，方案中给出警告</p>
+          <p className="list-card-detail">选择技能模块后，按价格节点查看可运行的硬件配置</p>
         </button>
       </div>
 
+      {mode === "existing" && (
       <div className="card" style={{ marginTop: 14 }}>
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h2 className="section-title">本机硬件配置</h2>
-          <button type="button" className="ghost-btn" onClick={() => void detect()} disabled={hwState === "detecting"}>
+          <button type="button" className="ghost-btn" onClick={() => void detect(true)} disabled={hwState === "detecting"}>
             {hwState === "detecting" ? "检测中…" : "重新检测"}
           </button>
         </div>
@@ -404,7 +435,7 @@ export function SkillsPage({ onNotice }: Props) {
         {hwState === "failed" && (
           <div className="empty">
             <p>{hwError}</p>
-            <button type="button" className="secondary-btn" onClick={() => void detect()}>
+            <button type="button" className="secondary-btn" onClick={() => void detect(true)}>
               重试
             </button>
           </div>
@@ -436,6 +467,7 @@ export function SkillsPage({ onNotice }: Props) {
           </div>
         )}
       </div>
+      )}
 
       <div className="row" style={{ justifyContent: "space-between", marginTop: 22 }}>
         <h2 className="section-title">选择技能</h2>
@@ -498,6 +530,116 @@ export function SkillsPage({ onNotice }: Props) {
         value={supplement}
         onChange={(event) => setSupplement(event.target.value)}
       />
+
+      {mode === "upgrade" && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <h2 className="section-title">硬件配置与组装价格</h2>
+              <p className="caption" style={{ marginTop: 4 }}>拖动滑块或点击价格节点查看对应档位，价格为静态参考数据 · 非实时报价</p>
+            </div>
+            <div className="tier-segment">
+              <button type="button" className={newPrice ? "active" : ""} onClick={() => setNewPrice(true)}>全新组装</button>
+              <button type="button" className={newPrice ? "" : "active"} onClick={() => setNewPrice(false)}>旧配件组装</button>
+            </div>
+          </div>
+
+          <div className="tier-track">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <span className="caption">最低配置 {newPrice ? HARDWARE_TIERS[0].newPrice : HARDWARE_TIERS[0].usedPrice}</span>
+              <span className="caption">目前最高配置 {newPrice ? HARDWARE_TIERS[HARDWARE_TIERS.length - 1].newPrice : HARDWARE_TIERS[HARDWARE_TIERS.length - 1].usedPrice}</span>
+            </div>
+            <div
+              className="tier-slider"
+              ref={tierSliderRef}
+              role="slider"
+              aria-label="价格节点"
+              aria-valuemin={1}
+              aria-valuemax={HARDWARE_TIERS.length}
+              aria-valuenow={tierIndex + 1}
+              tabIndex={0}
+              style={{ marginLeft: `calc(100% / ${HARDWARE_TIERS.length * 2})`, marginRight: `calc(100% / ${HARDWARE_TIERS.length * 2})` }}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                pickTier(event.clientX);
+              }}
+              onPointerMove={(event) => {
+                if (event.buttons === 1) {
+                  pickTier(event.clientX);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") {
+                  setTierIndex((index) => Math.max(0, index - 1));
+                }
+                if (event.key === "ArrowRight") {
+                  setTierIndex((index) => Math.min(HARDWARE_TIERS.length - 1, index + 1));
+                }
+              }}
+            >
+              <span className="tier-slider-track" />
+              <span className="tier-slider-fill" style={{ width: `${tierPercent}%` }} />
+              <span className="tier-slider-thumb" style={{ left: `${tierPercent}%` }} />
+            </div>
+            <div className="tier-labels" style={{ gridTemplateColumns: `repeat(${HARDWARE_TIERS.length}, 1fr)` }}>
+              {HARDWARE_TIERS.map((tier, index) => (
+                <button
+                  type="button"
+                  key={tier.level}
+                  className={`tier-label${index === tierIndex ? " active" : ""}`}
+                  onClick={() => setTierIndex(index)}
+                  title="点击跳到该价格节点"
+                >
+                  <span className="tier-price">{newPrice ? tier.newPrice : tier.usedPrice}</span>
+                  <span className="tier-name">{tier.level}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="tier-detail">
+            <div>
+              <div className="caption">{currentTier.level}</div>
+              <div className="row" style={{ alignItems: "center", gap: 8, marginTop: 4 }}>
+                <span className="tier-price-big">{currentPrice}</span>
+                <span className="tag">{newPrice ? "全新组装" : "旧配件组装"}</span>
+              </div>
+              <div className="tier-alt">{newPrice ? `旧配件组装 ${currentTier.usedPrice}` : `全新组装 ${currentTier.newPrice}`}</div>
+            </div>
+            <div className="tier-specs">
+              {[
+                ["处理器", currentTier.cpu],
+                ["显卡", currentTier.gpu],
+                ["内存", currentTier.memory],
+                ["存储", currentTier.storage]
+              ].map(([label, value]) => (
+                <div className="tier-spec" key={label}>
+                  <div className="caption">{label}</div>
+                  <div className="tier-spec-value">{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="tier-perf">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <strong>该配置的性能表现</strong>
+              <span className="caption">按已选 {selectedSkills.length} 项技能评估</span>
+            </div>
+            <p className="tier-perf-summary">{currentTier.summary}</p>
+            <div className="tier-perf-grid">
+              <span className="tier-perf-label accent">流畅运行</span>
+              <span>{smoothSkillsText}</span>
+              <span className="tier-perf-label warn">可用但偏慢</span>
+              <span>{moderateSkillsText}</span>
+              <span className="tier-perf-label">不建议本机运行</span>
+              <span className="tier-perf-muted">{limitedSkillsText}</span>
+            </div>
+          </div>
+
+          <div className="caption" style={{ marginTop: 10 }}>旧配件需检测后再购买；实际价格会随品牌、成色、保修和市场行情变化。</div>
+        </div>
+      )}
 
       <div className="row" style={{ marginTop: 16 }}>
         <button type="button" className="primary-btn" onClick={() => void generate()} disabled={planning}>

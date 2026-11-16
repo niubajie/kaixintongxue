@@ -79,6 +79,8 @@ func main() {
 		WriteTimeout:      120 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	// 后台预热硬件检测缓存：WMI 冷启动较慢，提前跑完可让前端秒开。
+	warmHardwareCache()
 	log.Printf("开心同学本地部署服务已启动: http://%s （软件运行目录 %s）", addr, app.runtimeRoot)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
