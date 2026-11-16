@@ -4,18 +4,15 @@
  * 网页端/手动运行时回退到 127.0.0.1:5085。
  */
 
+import { bridge } from "./platform";
+
 let baseUrl: string | null = null;
 
+// 端口一律通过平台抽象层获取，禁止在本文件直接 import @tauri-apps/*，
+// 否则网页端产物会被 Tauri 代码污染（AGENTS.md 第 6 节）。
 async function getBaseUrl(): Promise<string> {
   if (baseUrl) return baseUrl;
-  let port = 5085;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const p = await invoke<number>("local_service_port");
-    if (p && p > 0) port = p;
-  } catch {
-    // 非 Tauri 环境（网页端或 invoke 失败），使用默认端口。
-  }
+  const port = await bridge.getLocalServicePort();
   baseUrl = `http://127.0.0.1:${port}`;
   return baseUrl;
 }

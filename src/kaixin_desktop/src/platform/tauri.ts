@@ -2,7 +2,7 @@
 // 关键约束：@tauri-apps/* 全部用动态 import，
 // 否则将来打成 Web 版时会把 Tauri 代码混进产物。
 
-import type { DesktopBridge } from "./types";
+import { DEFAULT_LOCAL_PORT, type DesktopBridge } from "./types";
 
 async function currentWindow() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -15,13 +15,21 @@ export function createTauriBridge(): DesktopBridge {
 
     capabilities: {
       windowControls: true,
-      appVersion: true
+      appVersion: true,
+      localService: true
     },
 
     async getAppVersion(): Promise<string> {
       const { invoke } = await import("@tauri-apps/api/core");
       // 对应 src-tauri/src/lib.rs 里的 app_version 命令
       return invoke<string>("app_version");
+    },
+
+    async getLocalServicePort(): Promise<number> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      // 对应 src-tauri/src/lib.rs 里的 local_service_port 命令；0 表示 sidecar 启动失败
+      const port = await invoke<number>("local_service_port");
+      return port > 0 ? port : DEFAULT_LOCAL_PORT;
     },
 
     window: {

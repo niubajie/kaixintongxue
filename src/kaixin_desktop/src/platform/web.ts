@@ -1,18 +1,24 @@
 // 浏览器里的降级实现：不报错，也不假装支持。
 // 组件通过 capabilities 判断该不该渲染对应入口。
 
-import type { DesktopBridge } from "./types";
+import { DEFAULT_LOCAL_PORT, type DesktopBridge } from "./types";
 
 export const webBridge: DesktopBridge = {
   kind: "web",
 
   capabilities: {
     windowControls: false,
-    appVersion: false
+    appVersion: false,
+    localService: false
   },
 
   async getAppVersion(): Promise<string> {
     return "web";
+  },
+
+  async getLocalServicePort(): Promise<number> {
+    // 浏览器里没有 sidecar，使用本机默认端口（需要手动启动 kaixin-local）
+    return DEFAULT_LOCAL_PORT;
   },
 
   window: {

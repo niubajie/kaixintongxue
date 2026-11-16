@@ -51,8 +51,53 @@ fn spawn_sidecar(app: &AppHandle) -> Result<(u16, CommandChild), String> {
     Ok((port, child))
 }
 
+/// 启动失败兜底：WebView2 异常时 Tauri 会在 run() 内部 panic，
+/// 窗口一闪而过、用户看不到任何原因。这里接管 panic：先落日志，再用记事本把原因显示出来。
+fn report_startup_failure(detail: &str) {
+    // 逐个候选路径尝试，全部失败时把原因打到 stderr（会进控制台/事件日志）。
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("kaixin-startup-error.txt"));
+        }
+    }
+    candidates.push(std::env::temp_dir().join("kaixin-startup-error.txt"));
+    if let Ok(base) = std::env::var("LOCALAPPDATA") {
+        candidates.push(std::path::PathBuf::from(base).join("Kaixin").join("logs").join("startup-error.txt"));
+    }
+
+    let body = format!(
+        "开心同学 AI 助手 启动失败\n==============================\n\n技术原因：\n{}\n\n如果上面出现 WebView2 / 0x8000FFFF 之类的字样，说明本机的 Microsoft Edge WebView2 Runtime 损坏，界面无法创建。\n\n修复办法（任选其一）：\n1) 打开 Edge → 设置 → 关于 Microsoft Edge，等待更新完成，重启程序；\n2) 运行桌面上的「修复WebView2.ps1」，完成后重启程序；\n3) 从 https://developer.microsoft.com/microsoft-edge/webview2/ 下载 Evergreen Standalone Installer 重新安装。\n",
+        detail
+    );
+
+    for path in &candidates {
+        match std::fs::write(path, &body) {
+            Ok(_) => {
+                eprintln!("启动失败说明已写入 {}", path.display());
+                let _ = std::process::Command::new("notepad").arg(path).spawn();
+                return;
+            }
+            Err(err) => eprintln!("写入 {} 失败: {}", path.display(), err),
+        }
+    }
+    // 全都写不进去时，至少把原因打到 stderr。
+    eprintln!("启动失败原因（无法写入日志文件）：{}", detail);
+}
+
+/// 安装一个 panic 钩子，保证任何启动期崩溃都能被看到。
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        report_startup_failure(&info.to_string());
+        default_hook(info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    install_panic_hook();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {

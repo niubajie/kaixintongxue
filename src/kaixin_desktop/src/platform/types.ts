@@ -3,15 +3,27 @@
 
 export type PlatformKind = "tauri" | "web";
 
+/** 本地 Go sidecar 的默认端口（浏览器环境或 sidecar 启动失败时使用）。 */
+export const DEFAULT_LOCAL_PORT = 5085;
+
 export interface DesktopBridge {
   readonly kind: PlatformKind;
 
   readonly capabilities: {
     windowControls: boolean;
     appVersion: boolean;
+    /** 能否拿到本地部署服务的端口（仅桌面端为真） */
+    localService: boolean;
   };
 
   getAppVersion(): Promise<string>;
+
+  /**
+   * 本地 Go sidecar 的监听端口。
+   * 桌面端由 Tauri 启动时分配随机端口；浏览器环境固定回退到 5085。
+   * 组件与 deployApi 都不允许自己 import @tauri-apps/*。
+   */
+  getLocalServicePort(): Promise<number>;
 
   window: {
     minimize(): Promise<void>;
