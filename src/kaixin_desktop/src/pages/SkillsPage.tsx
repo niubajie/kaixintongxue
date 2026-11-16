@@ -13,6 +13,8 @@ import {
   saveCustomSkill,
   type CustomSkillRecord,
   matchSoftware,
+  openSitePage,
+  resolveSiteNeed,
   openSiteLogin,
   type DeployJob,
   type DeployPlan,
@@ -20,8 +22,17 @@ import {
   type HardwareInfo,
   type MatchReason,
   type PlanSiteAuth,
+  type ResolveResult,
   type SoftwareEntry
 } from "../deployApi";
+
+
+const INTENT_LABEL: Record<string, string> = {
+  read: "查看数据",
+  publish: "发布内容",
+  auth: "登录授权",
+  configure: "配置"
+};
 
 interface Props {
   onNotice: (message: string) => void;
@@ -149,6 +160,8 @@ export function SkillsPage({ onNotice }: Props) {
   const draftNoticeRef = useRef<HTMLDivElement>(null);
 
   const [plan, setPlan] = useState<DeployPlan | null>(null);
+  // 每个「需要访问网站」的技能解析出的落地步骤
+  const [siteGuides, setSiteGuides] = useState<ResolveResult[]>([]);
   const [planning, setPlanning] = useState(false);
   const [planError, setPlanError] = useState("");
   const planResultRef = useRef<HTMLDivElement>(null);
@@ -397,6 +410,27 @@ export function SkillsPage({ onNotice }: Props) {
       const result = await buildPlan(selections, extraIds, [...siteIds], modeOverride ?? mode);
       setPlan(result);
       setJob(null);
+
+      // 需要访问网站的技能，逐条解析到具体页面（失败不影响方案）
+      const guides: ResolveResult[] = [];
+      const seenSites = new Set<string>();
+      for (const skill of skills.filter((item) => selected.includes(item.id))) {
+        const hasSite = (skill.matches ?? []).some((match) => match.siteId);
+        const need = (skill.content ?? "").trim();
+        if (!hasSite || !need) {
+          continue;
+        }
+        try {
+          const guide = await resolveSiteNeed(need);
+          if (guide.site && !seenSites.has(guide.site.id)) {
+            seenSites.add(guide.site.id);
+            guides.push(guide);
+          }
+        } catch {
+          // 寻址失败不阻断部署方案
+        }
+      }
+      setSiteGuides(guides);
       onNotice("方案已生成：已合并重复软件并完成冲突检测。");
     } catch (error) {
       const message = error instanceof Error ? error.message : "生成方案失败";
@@ -762,6 +796,58 @@ export function SkillsPage({ onNotice }: Props) {
                       {site.authorized ? "已授权" : "待授权"}
                     </span>
                     <span className="caption" style={{ flex: 1 }}>{site.note}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {siteGuides.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="caption">需要访问的网站（点「打开页面」直达对应页面）</div>
+              <div className="plan-steps" style={{ marginTop: 8 }}>
+                {siteGuides.map((guide) => (
+                  <div
+                    key={(guide.site?.id ?? "site") + guide.need}
+                    style={{ borderTop: "1px dashed var(--line)", paddingTop: 10, marginTop: 6 }}
+                  >
+                    <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                      <span className="plan-name">{guide.site?.name ?? "未识别站点"}</span>
+                      <span className="tag accent">{INTENT_LABEL[guide.intent] ?? guide.intent}</span>
+                      {guide.objects.length > 0 && (
+                        <span className="caption">涉及：{guide.objects.join("、")}</span>
+                      )}
+                    </div>
+                    {guide.steps.map((step) => (
+                      <div
+                        className="plan-step"
+                        key={guide.need + step.order}
+                        style={{ paddingLeft: 12, marginTop: 6 }}
+                      >
+                        <span className="plan-order">[{step.order}]</span>
+                        <span className="caption" style={{ flex: 1 }}>
+                          {step.title}
+                          {step.successWhen ? `　到位判据：${step.successWhen}` : ""}
+                        </span>
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          onClick={() => {
+                            void openSitePage({ url: step.url, siteId: guide.site?.id })
+                              .then(() => onNotice(`已用浏览器打开：${step.title}`))
+                              .catch((error: unknown) =>
+                                onNotice(error instanceof Error ? error.message : "打开页面失败")
+                              );
+                          }}
+                        >
+                          打开页面
+                        </button>
+                      </div>
+                    ))}
+                    {guide.advice && (
+                      <div className="caption" style={{ paddingLeft: 12, marginTop: 4 }}>
+                        {guide.advice}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

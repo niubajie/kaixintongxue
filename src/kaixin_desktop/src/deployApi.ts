@@ -286,3 +286,64 @@ export async function deleteCustomSkill(id: string): Promise<void> {
     throw new Error(`删除本地技能失败（HTTP ${response.status}）`);
   }
 }
+
+
+// ---------- 网站寻址（从需求推导到具体页面） ----------
+
+export interface ResolveSiteBrief {
+  id: string;
+  name: string;
+  url: string;
+  category: string;
+}
+
+export interface ResolveStep {
+  order: number;
+  kind: "login" | "open-page" | "search" | "manual";
+  title: string;
+  url: string;
+  why: string;
+  successWhen?: string;
+  requiresAuth: boolean;
+}
+
+export interface ResolveResult {
+  need: string;
+  intent: "auth" | "read" | "publish" | "configure";
+  objects: string[];
+  site?: ResolveSiteBrief;
+  matchedKeywords?: string[];
+  steps: ResolveStep[];
+  alternatives?: ResolveSiteBrief[];
+  advice?: string;
+}
+
+export async function resolveSiteNeed(need: string): Promise<ResolveResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/sites/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ need })
+  });
+  if (!response.ok) {
+    throw new Error(`网站寻址失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as ResolveResult;
+}
+
+export async function openSitePage(input: {
+  siteId?: string;
+  page?: string;
+  url?: string;
+}): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/sites/open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `打开页面失败（HTTP ${response.status}）`);
+  }
+}
