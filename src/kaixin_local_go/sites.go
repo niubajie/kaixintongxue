@@ -13,15 +13,6 @@ import (
 //go:embed sites.json
 var sitesJSON []byte
 
-type SiteEntry struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Keywords []string `json:"keywords"`
-	URL      string   `json:"url"`
-	LoginURL string   `json:"loginUrl"`
-	Note     string   `json:"note"`
-}
-
 func loadSites() ([]SiteEntry, error) {
 	var sites []SiteEntry
 	if err := json.Unmarshal(sitesJSON, &sites); err != nil {

@@ -73,6 +73,8 @@ func main() {
 	mux.HandleFunc("GET /api/system/hardware", app.handleHardware)
 	mux.HandleFunc("GET /api/skills/catalog", app.handleCatalog)
 	mux.HandleFunc("GET /api/sites/catalog", app.handleSites)
+	mux.HandleFunc("POST /api/sites/resolve", app.handleSitesResolve)
+	mux.HandleFunc("POST /api/sites/open", app.handleSiteOpenPage)
 	mux.HandleFunc("POST /api/skills/match-software", app.handleMatchSoftware)
 	mux.HandleFunc("POST /api/auth/confirm", app.handleAuthConfirm)
 	mux.HandleFunc("POST /api/auth/open", app.handleAuthOpen)
