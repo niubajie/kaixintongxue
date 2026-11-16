@@ -95,7 +95,7 @@ export interface DeployStepStatus {
 
 export interface DeployJob {
   id: string;
-  state: "running" | "done" | "failed";
+  state: "running" | "done" | "failed" | "cancelled";
   startedAt: string;
   finishedAt?: string;
   logPath: string;
@@ -193,4 +193,15 @@ export function openSiteLogin(siteId: string): Promise<{ state: string }> {
 
 export function fetchDeployStatus(): Promise<DeployJob | { state: "idle" }> {
   return request<DeployJob | { state: "idle" }>("/api/deploy/status");
+}
+
+/** 取消当前部署任务：置位 sidecar 的任务上下文，各步骤会尽快退出。 */
+export async function cancelDeploy(): Promise<{ state: string }> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/deploy/cancel`, { method: "POST" });
+  const payload = (await response.json().catch(() => null)) as { message?: string; state?: string } | null;
+  if (!response.ok) {
+    throw new Error(payload?.message ?? `取消失败（HTTP ${response.status}）`);
+  }
+  return { state: payload?.state ?? "cancelling" };
 }

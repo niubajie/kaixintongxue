@@ -5,6 +5,7 @@ import {
   buildPlan,
   confirmSiteAuth,
   executeDeploy,
+  cancelDeploy,
   fetchCatalog,
   fetchDeployStatus,
   fetchHardware,
@@ -199,6 +200,16 @@ export function SkillsPage({ onNotice }: Props) {
     }, 1500);
     return () => window.clearInterval(timer);
   }, [job]);
+
+  // 取消部署：只发信号，真正的清理由 sidecar 在各步骤边界完成。
+  const handleCancel = async () => {
+    try {
+      await cancelDeploy();
+      onNotice("已发出取消请求，正在停止部署…");
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "取消失败");
+    }
+  };
 
   const toggleSkill = (skill: SkillOption) => {
     setPlan(null);
@@ -580,9 +591,22 @@ export function SkillsPage({ onNotice }: Props) {
         <div className="card" style={{ marginTop: 18 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <h2 className="section-title">部署进度</h2>
-            <span className={`tag${job.state === "failed" ? "" : " accent"}`}>
-              {job.state === "running" ? "进行中" : job.state === "done" ? "已完成" : "已失败"}
-            </span>
+            <div className="row" style={{ gap: 8 }}>
+              {job.state === "running" && (
+                <button type="button" className="secondary-btn" onClick={() => void handleCancel()}>
+                  取消部署
+                </button>
+              )}
+              <span className={`tag${job.state === "failed" || job.state === "cancelled" ? "" : " accent"}`}>
+                {job.state === "running"
+                  ? "进行中"
+                  : job.state === "done"
+                    ? "已完成"
+                    : job.state === "cancelled"
+                      ? "已取消"
+                      : "已失败"}
+              </span>
+            </div>
           </div>
           <div className="plan-steps">
             {job.steps.map((step) => {
