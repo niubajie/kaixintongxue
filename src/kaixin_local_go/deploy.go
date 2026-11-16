@@ -201,15 +201,19 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 			a.setStep(step, "skipped", "因上一步失败而跳过")
 			continue
 		}
+		var err error
 		if step.Action == "authorize" {
-			if err := a.runAuthorizeStep(step); err != nil {
-				a.setStep(step, "failed", err.Error())
-				failed = true
-			}
-			continue
+			err = a.runAuthorizeStep(step)
+		} else {
+			entry := findSoftware(a.catalog, step.SoftwareID)
+			err = a.executeStep(step, entry, force)
 		}
-		entry := findSoftware(a.catalog, step.SoftwareID)
-		if err := a.executeStep(step, entry, force); err != nil {
+		if err != nil {
+			if errors.Is(err, errCancelled) || a.cancelled() {
+				cancelled = true
+				a.setStep(step, "skipped", "任务已取消")
+				continue
+			}
 			a.setStep(step, "failed", err.Error())
 			failed = true
 		}
@@ -374,6 +378,9 @@ func (a *App) installPortableZip(step *DeployStepStatus, entry *SoftwareEntry, t
 		}
 		archivePath := filepath.Join(a.downloadDir, entry.ID+".zip")
 		if err := a.downloadFile(step, url, archivePath); err != nil {
+			if errors.Is(err, errCancelled) || a.cancelled() {
+				return errCancelled
+			}
 			lastErr = err
 			a.deployLog("[%s] 下载源 %d 失败：%v", entry.Name, idx+1, err)
 			continue
@@ -480,11 +487,23 @@ func (a *App) verifyInstall(step *DeployStepStatus, entry *SoftwareEntry, search
 func (a *App) downloadFile(step *DeployStepStatus, url, target string) error {
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
+		if a.cancelled() {
+			return errCancelled
+		}
 		lastErr = a.downloadOnce(step, url, target)
 		if lastErr == nil {
 			return nil
 		}
-		time.Sleep(2 * time.Second)
+		if errors.Is(lastErr, errCancelled) || a.cancelled() {
+			return errCancelled
+		}
+		if attempt == 0 {
+			select {
+			case <-time.After(2 * time.Second):
+			case <-a.deployContext().Done():
+				return errCancelled
+			}
+		}
 	}
 	return lastErr
 }
@@ -498,9 +517,16 @@ func (a *App) downloadOnce(step *DeployStepStatus, url, target string) error {
 	if parsed.Scheme != "https" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "localhost" {
 		return fmt.Errorf("下载地址必须是 HTTPS：%s", url)
 	}
-	client := &http.Client{Timeout: 30 * time.Minute}
-	response, err := client.Get(url)
+	request, err := http.NewRequestWithContext(a.deployContext(), http.MethodGet, url, nil)
 	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 30 * time.Minute}
+	response, err := client.Do(request)
+	if err != nil {
+		if a.cancelled() {
+			return errCancelled
+		}
 		return err
 	}
 	defer response.Body.Close()
@@ -564,6 +590,10 @@ func (a *App) downloadOnce(step *DeployStepStatus, url, target string) error {
 		}
 		if readErr != nil {
 			_ = file.Close()
+			if a.cancelled() {
+				_ = os.Remove(part)
+				return errCancelled
+			}
 			return readErr
 		}
 	}

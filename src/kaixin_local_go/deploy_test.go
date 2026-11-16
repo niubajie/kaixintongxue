@@ -3,14 +3,17 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -201,5 +204,57 @@ func TestDownloadProgressReportsBytes(t *testing.T) {
 	}
 	if step.DownloadStartedAt == "" {
 		t.Fatal("应记录下载开始时间")
+	}
+}
+
+// TestDownloadCancellationStopsRequest 验证阻塞中的下载会立即响应取消，且不再重试。
+func TestDownloadCancellationStopsRequest(t *testing.T) {
+	var requests atomic.Int32
+	started := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Length", strconv.Itoa(1024*1024))
+		_, _ = w.Write([]byte("first chunk"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	app := &App{downloadDir: t.TempDir()}
+	ctx, cancel := context.WithCancel(context.Background())
+	app.deploy.ctx = ctx
+	step := &DeployStepStatus{SoftwareID: "tool", Name: "Tool"}
+	target := filepath.Join(app.downloadDir, "tool.zip")
+	done := make(chan error, 1)
+	go func() {
+		done <- app.downloadFile(step, server.URL, target)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("下载未开始")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, errCancelled) {
+			t.Fatalf("期望任务取消，实际 %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("下载未在取消后及时退出")
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("取消后不应重试，实际请求 %d 次", got)
+	}
+	if _, err := os.Stat(target + ".part"); !os.IsNotExist(err) {
+		t.Fatal("取消后应清理临时下载文件")
 	}
 }
