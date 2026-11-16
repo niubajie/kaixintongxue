@@ -231,3 +231,58 @@ export async function cancelDeploy(): Promise<{ state: string }> {
   }
   return { state: payload?.state ?? "cancelling" };
 }
+
+
+// ---------- 自定义技能（落本地库，见 docs/08 第 11 节） ----------
+
+export interface CustomSkillRecord {
+  id: string;
+  name: string;
+  description: string;
+  softwareIds: string[];
+  siteIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listCustomSkills(): Promise<CustomSkillRecord[]> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/skills/custom`);
+  if (!response.ok) {
+    throw new Error(`读取本地技能失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { skills?: CustomSkillRecord[] };
+  return payload.skills ?? [];
+}
+
+export async function saveCustomSkill(input: {
+  id?: string;
+  name: string;
+  description: string;
+  softwareIds: string[];
+  siteIds: string[];
+}): Promise<CustomSkillRecord> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/skills/custom`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { skill?: CustomSkillRecord; message?: string }
+    | null;
+  if (!response.ok || !payload?.skill) {
+    throw new Error(payload?.message ?? `保存到本地库失败（HTTP ${response.status}）`);
+  }
+  return payload.skill;
+}
+
+export async function deleteCustomSkill(id: string): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/skills/custom/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`删除本地技能失败（HTTP ${response.status}）`);
+  }
+}

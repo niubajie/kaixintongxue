@@ -9,6 +9,9 @@ import {
   fetchCatalog,
   fetchDeployStatus,
   fetchHardware,
+  listCustomSkills,
+  saveCustomSkill,
+  type CustomSkillRecord,
   matchSoftware,
   openSiteLogin,
   type DeployJob,
@@ -22,6 +25,37 @@ import {
 
 interface Props {
   onNotice: (message: string) => void;
+}
+
+
+// 本地库记录 → 界面用的技能对象
+function toSkillOption(record: CustomSkillRecord): SkillOption {
+  const firstLine = record.description.split("\n")[0] ?? "";
+  return {
+    id: record.id,
+    name: record.name,
+    content: record.description,
+    icon: record.name.slice(0, 1),
+    description: firstLine || "自建技能",
+    demand: 1,
+    matches: record.softwareIds.map((softwareId) => ({
+      text: "",
+      softwareId,
+      software: softwareId,
+      score: 0,
+      reasons: []
+    }))
+  };
+}
+
+function matchSoftwareIds(matches?: SkillOption["matches"]): string[] {
+  return [...new Set((matches ?? []).filter((item) => item.softwareId).map((item) => item.softwareId))];
+}
+
+function matchSiteIds(matches?: SkillOption["matches"]): string[] {
+  return [
+    ...new Set((matches ?? []).filter((item) => item.siteId).map((item) => item.siteId as string))
+  ];
 }
 
 interface SkillDraft {
@@ -160,6 +194,19 @@ export function SkillsPage({ onNotice }: Props) {
       }
       localStorage.removeItem("kaixin.skills");
     }
+
+    // 自定义技能以本地库为准（docs/08：唯一持久化落点）
+    void listCustomSkills()
+      .then((records) => {
+        if (records.length === 0) {
+          return;
+        }
+        setSkills((list) => [
+          ...list.filter((item) => !item.id.startsWith("custom-")),
+          ...records.map(toSkillOption)
+        ]);
+      })
+      .catch(() => undefined);
   }, [detect, setSkills]);
 
   useEffect(() => {
@@ -263,7 +310,7 @@ export function SkillsPage({ onNotice }: Props) {
     }
   };
 
-  const saveSkill = () => {
+  const saveSkill = async () => {
     const name = draft.name.trim();
     if (!name) {
       onNotice("请填写技能名称。");
@@ -280,6 +327,19 @@ export function SkillsPage({ onNotice }: Props) {
         )
       );
       onNotice(`已更新技能「${name}」。`);
+      if (editing.id.startsWith("custom-") || editing.id.startsWith("skill-")) {
+        try {
+          await saveCustomSkill({
+            id: editing.id,
+            name,
+            description: content,
+            softwareIds: matchSoftwareIds(matches),
+            siteIds: matchSiteIds(matches)
+          });
+        } catch (error) {
+          onNotice(error instanceof Error ? error.message : "保存到本地库失败");
+        }
+      }
     } else {
       const id = `custom-${Date.now()}`;
       setSkills((list) => [
@@ -287,7 +347,20 @@ export function SkillsPage({ onNotice }: Props) {
         { id, name, content, matches, icon: name.slice(0, 1), description: content ? content.split("\n")[0] : "自建技能", demand: 1 }
       ]);
       setSelected((current) => [id, ...current]);
-      onNotice(`已新增技能「${name}」，并加入已选。`);
+      try {
+        await saveCustomSkill({
+          id,
+          name,
+          description: content,
+          softwareIds: matchSoftwareIds(matches),
+          siteIds: matchSiteIds(matches)
+        });
+        onNotice(`已新增技能「${name}」，已存入本地库并加入已选。`);
+      } catch (error) {
+        onNotice(
+          (error instanceof Error ? error.message : "保存到本地库失败") + "（当前仅保存在界面）"
+        );
+      }
     }
     setDialogOpen(false);
     setPlan(null);
