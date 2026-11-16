@@ -61,6 +61,7 @@ func main() {
 	mux.HandleFunc("POST /api/deploy/plan", app.handlePlan)
 	mux.HandleFunc("POST /api/deploy/execute", app.handleDeployExecute)
 	mux.HandleFunc("GET /api/deploy/status", app.handleDeployStatus)
+	mux.HandleFunc("POST /api/deploy/cancel", app.handleDeployCancel)
 
 	// 端口优先从环境变量 KAIXIN_PORT 读取（桌面端 Tauri sidecar 会注入一个空闲端口），
 	// 未设置时回退到 5085，方便网页端与手动调试。

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,6 +50,29 @@ type deployer struct {
 	job     *DeployJob
 	running bool
 	logFile *os.File
+	// 当前部署任务的上下文：用户点「取消」时 cancel，长耗时步骤据此退出。
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// errCancelled 用于把「用户取消」与「执行失败」区分开。
+var errCancelled = errors.New("任务已取消")
+
+// cancelled 判断当前任务是否已被取消。
+func (a *App) cancelled() bool {
+	a.deploy.mu.Lock()
+	defer a.deploy.mu.Unlock()
+	return a.deploy.ctx != nil && a.deploy.ctx.Err() != nil
+}
+
+// deployContext 返回当前任务上下文，未启动过任务时退化为 Background。
+func (a *App) deployContext() context.Context {
+	a.deploy.mu.Lock()
+	defer a.deploy.mu.Unlock()
+	if a.deploy.ctx != nil {
+		return a.deploy.ctx
+	}
+	return context.Background()
 }
 
 func (a *App) handleDeployExecute(w http.ResponseWriter, r *http.Request) {
@@ -105,12 +129,32 @@ func (a *App) handleDeployExecute(w http.ResponseWriter, r *http.Request) {
 			Action: "authorize", Status: "pending", SiteID: auth.SiteID, LoginURL: auth.LoginURL, Message: auth.Note,
 		})
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	a.deploy.job = job
 	a.deploy.running = true
+	a.deploy.ctx = ctx
+	a.deploy.cancel = cancel
 	a.deploy.mu.Unlock()
 
 	go a.runDeploy(job, request.Force)
 	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "state": job.State})
+}
+
+// handleDeployCancel：请求取消当前部署任务。
+// 只是发出取消信号，真正的清理由 runDeploy 在各步骤边界完成。
+func (a *App) handleDeployCancel(w http.ResponseWriter, r *http.Request) {
+	a.deploy.mu.Lock()
+	running := a.deploy.running
+	cancel := a.deploy.cancel
+	a.deploy.mu.Unlock()
+
+	if !running || cancel == nil {
+		fail(w, http.StatusConflict, "当前没有正在进行的部署任务")
+		return
+	}
+	cancel()
+	a.deployLog("收到取消请求，正在停止当前任务")
+	writeJSON(w, http.StatusAccepted, map[string]any{"state": "cancelling"})
 }
 
 func (a *App) handleDeployStatus(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +190,13 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 	}
 	a.deployLog("部署任务 %s 开始，共 %d 步", job.ID, len(job.Steps))
 	failed := false
+	cancelled := false
 	for _, step := range job.Steps {
+		if a.cancelled() {
+			cancelled = true
+			a.setStep(step, "skipped", "任务已取消")
+			continue
+		}
 		if failed {
 			a.setStep(step, "skipped", "因上一步失败而跳过")
 			continue
@@ -166,12 +216,19 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 	}
 	a.deploy.mu.Lock()
 	a.deploy.running = false
-	if failed {
+	switch {
+	case cancelled:
+		job.State = "cancelled"
+	case failed:
 		job.State = "failed"
-	} else {
+	default:
 		job.State = "done"
 	}
 	job.FinishedAt = time.Now().Format(time.RFC3339)
+	if a.deploy.cancel != nil {
+		a.deploy.cancel()
+		a.deploy.cancel = nil
+	}
 	a.deploy.mu.Unlock()
 	a.deployLog("部署任务结束：%s", job.State)
 }
@@ -230,6 +287,9 @@ func (a *App) runAuthorizeStep(step *DeployStepStatus) error {
 	}
 	deadline := time.Now().Add(authWaitTimeout)
 	for time.Now().Before(deadline) {
+		if a.cancelled() {
+			return errCancelled
+		}
 		if ok, _ := readAuthMarker(a.authDir, step.SiteID); ok {
 			a.setStep(step, "done", "授权完成")
 			return nil
@@ -359,16 +419,16 @@ func (a *App) installPortableZip(step *DeployStepStatus, entry *SoftwareEntry, t
 }
 
 func (a *App) installByCLI(step *DeployStepStatus, entry *SoftwareEntry, targetDir string) error {
-	fields := strings.Fields(entry.Install.Command)
-	if len(fields) == 0 {
-		return fmt.Errorf("目录未提供安装命令")
+	fields, err := splitCommand(entry.Install.Command)
+	if err != nil {
+		return fmt.Errorf("安装命令解析失败：%v", err)
 	}
 	exe, err := findExecutable(a.runtimeRoot, fields[0])
 	if err != nil {
 		return fmt.Errorf("未找到 %s：请先完成依赖软件的安装", fields[0])
 	}
 	a.setStep(step, "installing", entry.Install.Command)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(a.deployContext(), 30*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, fields[1:]...)
 	cmd.Dir = filepath.Dir(exe)
@@ -387,10 +447,13 @@ func (a *App) installByCLI(step *DeployStepStatus, entry *SoftwareEntry, targetD
 }
 
 func (a *App) verifyInstall(step *DeployStepStatus, entry *SoftwareEntry, searchDir string) error {
-	fields := strings.Fields(entry.Verify.Command)
-	if len(fields) == 0 {
+	if strings.TrimSpace(entry.Verify.Command) == "" {
 		a.setStep(step, "done", "安装完成")
 		return nil
+	}
+	fields, err := splitCommand(entry.Verify.Command)
+	if err != nil {
+		return fmt.Errorf("验证命令解析失败：%v", err)
 	}
 	a.setStep(step, "verifying-install", entry.Verify.Command)
 	exe, err := findExecutable(searchDir, fields[0])
@@ -400,7 +463,7 @@ func (a *App) verifyInstall(step *DeployStepStatus, entry *SoftwareEntry, search
 	if err != nil {
 		return fmt.Errorf("安装后未找到可执行文件 %s", fields[0])
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(a.deployContext(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, fields[1:]...)
 	cmd.Dir = filepath.Dir(exe)
@@ -470,6 +533,11 @@ func (a *App) downloadOnce(step *DeployStepStatus, url, target string) error {
 	var written int64
 	buffer := make([]byte, 128*1024)
 	for {
+		if a.cancelled() {
+			_ = file.Close()
+			_ = os.Remove(part)
+			return errCancelled
+		}
 		n, readErr := response.Body.Read(buffer)
 		if n > 0 {
 			if _, err := file.Write(buffer[:n]); err != nil {
@@ -569,6 +637,50 @@ func humanDuration(seconds int64) string {
 		}
 		return fmt.Sprintf("%d 小时", hours)
 	}
+}
+
+// splitCommand 按空白切分命令，支持用双引号包裹含空格的路径。
+// 例如：`"C:\Program Files\App\app.exe" --version` → 两个参数。
+// 之前的 strings.Fields 会把带空格的路径切碎，导致找不到可执行文件。
+func splitCommand(command string) ([]string, error) {
+	var (
+		fields  []string
+		current strings.Builder
+		inQuote bool
+		hasArg  bool
+	)
+	flush := func() {
+		if hasArg {
+			fields = append(fields, current.String())
+			current.Reset()
+			hasArg = false
+		}
+	}
+	for _, r := range command {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+			hasArg = true
+		case r == ' ' || r == '\t' || r == '\n' || r == '\r':
+			if inQuote {
+				current.WriteRune(r)
+				hasArg = true
+			} else {
+				flush()
+			}
+		default:
+			current.WriteRune(r)
+			hasArg = true
+		}
+	}
+	if inQuote {
+		return nil, fmt.Errorf("命令中的引号未闭合：%s", command)
+	}
+	flush()
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("命令为空")
+	}
+	return fields, nil
 }
 
 func fileSHA256(path string) (string, error) {
