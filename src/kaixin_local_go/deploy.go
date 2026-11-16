@@ -234,6 +234,22 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 		a.deploy.cancel = nil
 	}
 	a.deploy.mu.Unlock()
+
+	// 部署结果落本地库，供「部署历史」查看与排障。
+	if a.store != nil {
+		total := 0
+		for _, step := range job.Steps {
+			total += step.SizeMb
+		}
+		stepsJSON, _ := json.Marshal(job.Steps)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = a.store.RecordDeployRun(ctx, DeployRun{
+			ID: job.ID, State: job.State, StartedAt: job.StartedAt,
+			FinishedAt: job.FinishedAt, TotalSizeMb: total,
+			LogPath: job.LogPath, StepsJSON: string(stepsJSON),
+		})
+		cancel()
+	}
 	a.deployLog("部署任务结束：%s", job.State)
 }
 

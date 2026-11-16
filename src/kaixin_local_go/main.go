@@ -18,6 +18,7 @@ type App struct {
 	logDir      string
 	authDir     string
 	deploy      deployer
+	store       *Store
 }
 
 func main() {
@@ -48,6 +49,23 @@ func main() {
 		}
 	}
 
+	// 本地库：所有持久化数据的唯一落点（docs/08 第 11 节）
+	// KAIXIN_DATA_DIR 可用于排障或测试时指定其他目录。
+	dataDir := filepath.Join(root, "data")
+	if custom := os.Getenv("KAIXIN_DATA_DIR"); custom != "" {
+		dataDir = custom
+	}
+	store, err := OpenStore(dataDir)
+	if err != nil {
+		// 建库失败不阻断整个服务：硬件检测、匹配、方案生成都还能用，
+		// 只有数据接口返回 503。这样用户至少不会被"整个程序不能用"卡住。
+		log.Printf("[WARN] 本地库初始化失败（数据接口将不可用）: %v", err)
+	} else {
+		defer store.Close()
+		app.store = store
+		log.Printf("本地库就绪: %s", filepath.Join(dataDir, "app.db"))
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "kaixin-local"})
@@ -62,6 +80,11 @@ func main() {
 	mux.HandleFunc("POST /api/deploy/execute", app.handleDeployExecute)
 	mux.HandleFunc("GET /api/deploy/status", app.handleDeployStatus)
 	mux.HandleFunc("POST /api/deploy/cancel", app.handleDeployCancel)
+	mux.HandleFunc("GET /api/deploy/history", app.handleDeployHistory)
+	mux.HandleFunc("GET /api/data/info", app.handleDataInfo)
+	mux.HandleFunc("GET /api/skills/custom", app.handleListCustomSkills)
+	mux.HandleFunc("POST /api/skills/custom", app.handleSaveCustomSkill)
+	mux.HandleFunc("DELETE /api/skills/custom/{id}", app.handleDeleteCustomSkill)
 
 	// 端口优先从环境变量 KAIXIN_PORT 读取（桌面端 Tauri sidecar 会注入一个空闲端口），
 	// 未设置时回退到 5085，方便网页端与手动调试。
