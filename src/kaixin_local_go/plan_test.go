@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestBuildRecommendation(t *testing.T) {
+	entries := testCatalog(t)
+	steps := []PlanStep{
+		{Order: 1, SoftwareID: "ollama", Name: "Ollama"},
+		{Order: 2, SoftwareID: "qwen2.5-7b", Name: "Qwen2.5 7B"},
+	}
+	rec := buildRecommendation(entries, steps, 5500)
+	if rec == nil {
+		t.Fatal("推荐硬件不应为空")
+	}
+	// 5500 MB × 2 / 1024 ≈ 10.74，向上取一位小数应为 10.8。
+	if rec.NeedDiskGb != 10.8 {
+		t.Fatalf("磁盘需求错误：%v", rec.NeedDiskGb)
+	}
+	if len(rec.Items) < 2 {
+		t.Fatalf("推荐说明不足：%+v", rec.Items)
+	}
+}
+
 func TestPlanDedupAndTopology(t *testing.T) {
 	entries := testCatalog(t)
 	skills := []SkillSelection{

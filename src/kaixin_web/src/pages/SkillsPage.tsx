@@ -317,7 +317,7 @@ export function SkillsPage({ onNotice }: Props) {
         const ids = [...new Set((matches ?? []).filter((line) => line.softwareId).map((line) => line.softwareId))];
         selections.push({ id: skill.id, name: skill.name, softwareIds: ids });
       }
-      const result = await buildPlan(selections, extraIds, [...siteIds]);
+      const result = await buildPlan(selections, extraIds, [...siteIds], mode);
       setPlan(result);
       setJob(null);
       onNotice("方案已生成：已合并重复软件并完成冲突检测。");
@@ -383,11 +383,11 @@ export function SkillsPage({ onNotice }: Props) {
       </div>
 
       <div className="mode-cards">
-        <button type="button" className={`mode-card${mode === "existing" ? " active" : ""}`} onClick={() => setMode("existing")}>
+        <button type="button" className={`mode-card${mode === "existing" ? " active" : ""}`} onClick={() => { setMode("existing"); setPlan(null); }}>
           <div className="list-card-title">现有电脑 + AI 技能</div>
           <p className="list-card-detail">基于当前硬件配置，选择可运行的 AI 技能</p>
         </button>
-        <button type="button" className={`mode-card${mode === "upgrade" ? " active" : ""}`} onClick={() => setMode("upgrade")}>
+        <button type="button" className={`mode-card${mode === "upgrade" ? " active" : ""}`} onClick={() => { setMode("upgrade"); setPlan(null); }}>
           <div className="list-card-title">AI 技能 + 硬件配置</div>
           <p className="list-card-detail">按所选技能反推推荐硬件，方案中给出警告</p>
         </button>
@@ -523,6 +523,24 @@ export function SkillsPage({ onNotice }: Props) {
           {plan.warnings.map((warning) => (
             <div className="plan-warning" key={warning}>⚠ {warning}</div>
           ))}
+          {plan.recommendation && (
+            <div style={{ marginTop: 12, padding: "10px 12px", border: "1px dashed #c9cfd6", borderRadius: 8 }}>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <strong>推荐硬件配置</strong>
+                <span className="caption">按所选技能反推，供升级参考</span>
+              </div>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                <span className="tag accent">内存 ≥ {plan.recommendation.minMemoryGb} GB</span>
+                {plan.recommendation.minVramGb > 0 && <span className="tag accent">显存 ≥ {plan.recommendation.minVramGb} GB</span>}
+                <span className="tag accent">磁盘 ≥ {plan.recommendation.needDiskGb} GB</span>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                {plan.recommendation.items.map((item) => (
+                  <div className="caption" key={item}>· {item}</div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="plan-steps">
             {plan.steps.map((step) => (
               <div className="plan-step" key={step.softwareId}>
