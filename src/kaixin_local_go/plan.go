@@ -206,14 +206,25 @@ func BuildPlan(entries []SoftwareEntry, skills []SkillSelection, extra []string,
 	// 按 20 MB/s 估算下载耗时，另加 1 分钟解压与校验。
 	plan.EstimatedMinutes = plan.TotalSizeMb/20/60 + 1
 
+	// 目录里没配 SHA-256 的软件，安装时无法校验完整性，提前提示。
+	for _, id := range ordered {
+		entry := findSoftware(entries, id)
+		if entry != nil && entry.Install.Type == "portable-zip" && entry.Install.SHA256 == "" {
+			warnings = append(warnings, fmt.Sprintf("%s 未配置校验值，安装时将跳过完整性校验。", entry.Name))
+		}
+	}
+
 	if hw != nil {
+		if hw.GPUIntegrated {
+			warnings = append(warnings, fmt.Sprintf("检测到集成显卡（%s，与内存共享）：本地大模型建议使用独立显卡，或改用云端模型。", hw.GPUName))
+		}
 		needGb := float64(plan.TotalSizeMb) * 2 / 1024 // 下载 + 解压预留两倍空间
 		for _, disk := range hw.Disks {
 			if disk.Name == "C:" && disk.FreeGb < needGb {
 				warnings = append(warnings, fmt.Sprintf("磁盘空间不足：本方案约需 %.1f GB（含解压临时空间），C: 仅剩 %.1f GB。", needGb, disk.FreeGb))
 			}
 		}
-		if maxVram > 0 {
+		if maxVram > 0 && !hw.GPUIntegrated {
 			if hw.GPUVramGb != nil && *hw.GPUVramGb < float64(maxVram) {
 				warnings = append(warnings, fmt.Sprintf("当前显存 %.1f GB，低于方案建议的 %d GB，本地大模型可能运行缓慢或无法加载。", *hw.GPUVramGb, maxVram))
 			} else if hw.GPUVramGb == nil {

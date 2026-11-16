@@ -11,7 +11,7 @@ import (
 var catalogJSON []byte
 
 type InstallSpec struct {
-	Type     string   `json:"type"` // portable-zip / cli / manual
+	Type     string   `json:"type"`               // portable-zip / cli / manual
 	URL      string   `json:"url,omitempty"`      // 兼容旧数据，等价于 Sources[0]
 	Sources  []string `json:"sources,omitempty"`  // 多个下载源，按顺序尝试
 	Fallback string   `json:"fallback,omitempty"` // 全部下载失败时引导用户访问的页面

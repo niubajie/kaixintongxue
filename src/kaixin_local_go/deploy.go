@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,11 +36,11 @@ type DeployStepStatus struct {
 }
 
 type DeployJob struct {
-	ID         string             `json:"id"`
-	State      string             `json:"state"` // running/done/failed
-	StartedAt  string             `json:"startedAt"`
-	FinishedAt string             `json:"finishedAt,omitempty"`
-	LogPath    string             `json:"logPath"`
+	ID         string              `json:"id"`
+	State      string              `json:"state"` // running/done/failed
+	StartedAt  string              `json:"startedAt"`
+	FinishedAt string              `json:"finishedAt,omitempty"`
+	LogPath    string              `json:"logPath"`
 	Steps      []*DeployStepStatus `json:"steps"`
 }
 
@@ -331,7 +332,7 @@ func (a *App) installPortableZip(step *DeployStepStatus, entry *SoftwareEntry, t
 			}
 			verified = true
 		} else {
-			a.deployLog("[%s] 目录未提供 SHA-256，跳过校验", entry.Name)
+			a.deployLog("[WARN] [%s] 未配置 SHA-256，本次安装跳过完整性校验（来源 %s）", entry.Name, url)
 		}
 		a.deploy.mu.Lock()
 		step.HashVerified = &verified
@@ -426,6 +427,14 @@ func (a *App) downloadFile(step *DeployStepStatus, url, target string) error {
 }
 
 func (a *App) downloadOnce(step *DeployStepStatus, url, target string) error {
+	parsed, err := neturl.Parse(url)
+	if err != nil {
+		return fmt.Errorf("下载地址非法：%v", err)
+	}
+	// 只允许 HTTPS（本机回环除外）：明文传输可能被中间人替换安装包。
+	if parsed.Scheme != "https" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "localhost" {
+		return fmt.Errorf("下载地址必须是 HTTPS：%s", url)
+	}
 	client := &http.Client{Timeout: 30 * time.Minute}
 	response, err := client.Get(url)
 	if err != nil {
@@ -434,6 +443,12 @@ func (a *App) downloadOnce(step *DeployStepStatus, url, target string) error {
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d", response.StatusCode)
+	}
+	if response.Request != nil {
+		final := response.Request.URL
+		if final.Scheme != "https" && final.Hostname() != "127.0.0.1" && final.Hostname() != "localhost" {
+			return fmt.Errorf("下载被重定向到非 HTTPS 地址，已中止")
+		}
 	}
 	if response.ContentLength > 0 {
 		a.deploy.mu.Lock()
@@ -576,10 +591,26 @@ func unzip(archivePath, targetDir string) error {
 		return err
 	}
 	defer reader.Close()
+	const (
+		maxExtractBytes = int64(3) << 30 // 解压后总大小上限 3 GiB，防 zip bomb
+		maxEntries      = 20000          // 文件数量上限
+	)
+	if len(reader.File) > maxEntries {
+		return fmt.Errorf("安装包文件数异常（%d 个），已中止", len(reader.File))
+	}
+	var total int64
 	for _, file := range reader.File {
 		clean := filepath.Clean(file.Name)
-		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
+		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) ||
+			strings.ContainsAny(clean, ":") || strings.HasPrefix(clean, `\`) {
 			return fmt.Errorf("安装包含非法路径：%s", file.Name)
+		}
+		if file.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("安装包含符号链接，已中止：%s", file.Name)
+		}
+		total += int64(file.UncompressedSize64)
+		if total > maxExtractBytes {
+			return fmt.Errorf("解压后体积超过上限（3 GB），已中止")
 		}
 		target := filepath.Join(targetDir, clean)
 		if file.FileInfo().IsDir() {

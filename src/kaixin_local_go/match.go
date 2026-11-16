@@ -21,9 +21,9 @@ type MatchLine struct {
 	Software   string           `json:"software"`   // 无匹配时为「无」
 	Score      int              `json:"score"`
 	Reasons    []string         `json:"reasons"`
-	SiteID     string           `json:"siteId,omitempty"`  // 命中指定网站时填写，用于授权
-	Site       string           `json:"site,omitempty"`    // 命中网站名称，如「抖音」
-	SiteURL    string           `json:"siteUrl,omitempty"` // 命中网站网址，追加在技能说明后面
+	SiteID     string           `json:"siteId,omitempty"`     // 命中指定网站时填写，用于授权
+	Site       string           `json:"site,omitempty"`       // 命中网站名称，如「抖音」
+	SiteURL    string           `json:"siteUrl,omitempty"`    // 命中网站网址，追加在技能说明后面
 	Candidates []MatchCandidate `json:"candidates,omitempty"` // 前 3 个候选，便于手动改选
 }
 

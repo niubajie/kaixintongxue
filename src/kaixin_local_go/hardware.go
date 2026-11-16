@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -17,7 +18,8 @@ type HardwareInfo struct {
 	MemoryTotalGb float64    `json:"memoryTotalGb"`
 	MemoryFreeGb  float64    `json:"memoryFreeGb"`
 	GPUName       string     `json:"gpuName"`
-	GPUVramGb     *float64   `json:"gpuVramGb"` // WMI 读不到时为 null
+	GPUIntegrated bool       `json:"gpuIntegrated"` // 核显 / APU：与内存共享，显存数值不可信
+	GPUVramGb     *float64   `json:"gpuVramGb"`     // WMI 读不到或为核显时为 null
 	OSCaption     string     `json:"osCaption"`
 	Disks         []DiskInfo `json:"disks"`
 	DetectedAt    string     `json:"detectedAt"`
@@ -114,7 +116,10 @@ func detectHardwareOnce(ctx context.Context) (*HardwareInfo, error) {
 		OSCaption:     raw.Caption,
 		DetectedAt:    time.Now().Format(time.RFC3339),
 	}
-	if raw.AdapterRam != nil && *raw.AdapterRam > 0 {
+	info.GPUIntegrated = isIntegratedGPU(raw.GpuName)
+	// 核显/APU 的 AdapterRAM 来自共享内存，WMI 报出的数值不可信（例如 Vega 8 常报 1 GB），
+	// 此时不给显存数字，交给上层按"共享内存"处理，避免误导用户。
+	if !info.GPUIntegrated && raw.AdapterRam != nil && *raw.AdapterRam > 0 {
 		vram := float64(*raw.AdapterRam) / gb
 		info.GPUVramGb = &vram
 	}
@@ -122,6 +127,20 @@ func detectHardwareOnce(ctx context.Context) (*HardwareInfo, error) {
 		info.Disks = append(info.Disks, DiskInfo{Name: d.DeviceID, TotalGb: d.Size / gb, FreeGb: d.FreeSpace / gb})
 	}
 	return info, nil
+}
+
+// isIntegratedGPU：按型号名判断是否为核显 / APU。这类显卡没有独立显存。
+func isIntegratedGPU(name string) bool {
+	lower := strings.ToLower(name)
+	for _, marker := range []string{
+		"vega", "radeon(tm) graphics", "radeon graphics",
+		"uhd graphics", "hd graphics", "iris", "apple m",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // runHardwareScript 单独抽成变量，便于测试重试逻辑。

@@ -70,3 +70,7 @@ vite.config.js
 vite.config.d.ts
 *.tsbuildinfo
 
+
+# 本地构建产物
+_work/
+

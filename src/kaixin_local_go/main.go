@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // 开心同学 · 本地部署服务：纯本地、无数据库，只监听 127.0.0.1。
@@ -68,8 +69,17 @@ func main() {
 		port = "5085"
 	}
 	addr := "127.0.0.1:" + port
+	// 显式设置超时：ListenAndServe 默认无 ReadHeaderTimeout，慢连接会一直占着 goroutine。
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           cors(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	log.Printf("开心同学本地部署服务已启动: http://%s （软件运行目录 %s）", addr, app.runtimeRoot)
-	if err := http.ListenAndServe(addr, cors(mux)); err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
 }
