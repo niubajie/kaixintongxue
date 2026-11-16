@@ -126,11 +126,11 @@ export function SkillsPage({ onNotice }: Props) {
   const [authSite, setAuthSite] = useState<PlanSiteAuth | null>(null);
   const [starting, setStarting] = useState(false);
 
-  const detect = useCallback(async () => {
+  const detect = useCallback(async (refresh = false) => {
     setHwState("detecting");
     setHwError("");
     try {
-      const info = await fetchHardware();
+      const info = await fetchHardware(refresh);
       setHardware(info);
       setHwState("ready");
     } catch (error) {
@@ -396,7 +396,7 @@ export function SkillsPage({ onNotice }: Props) {
       <div className="card" style={{ marginTop: 14 }}>
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h2 className="section-title">本机硬件配置</h2>
-          <button type="button" className="ghost-btn" onClick={() => void detect()} disabled={hwState === "detecting"}>
+          <button type="button" className="ghost-btn" onClick={() => void detect(true)} disabled={hwState === "detecting"}>
             {hwState === "detecting" ? "检测中…" : "重新检测"}
           </button>
         </div>
@@ -404,7 +404,7 @@ export function SkillsPage({ onNotice }: Props) {
         {hwState === "failed" && (
           <div className="empty">
             <p>{hwError}</p>
-            <button type="button" className="secondary-btn" onClick={() => void detect()}>
+            <button type="button" className="secondary-btn" onClick={() => void detect(true)}>
               重试
             </button>
           </div>

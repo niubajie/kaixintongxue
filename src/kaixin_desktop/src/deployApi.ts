@@ -151,8 +151,10 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 20000): 
   }
 }
 
-export async function fetchHardware(): Promise<HardwareInfo> {
-  const payload = await request<{ hardware: HardwareInfo }>("/api/system/hardware", undefined, 30000);
+// refresh=true 时跳过服务端缓存强制重新检测（用于「重新检测」按钮）。
+export async function fetchHardware(refresh = false): Promise<HardwareInfo> {
+  const path = refresh ? "/api/system/hardware?refresh=1" : "/api/system/hardware";
+  const payload = await request<{ hardware: HardwareInfo }>(path, undefined, 60000);
   return payload.hardware;
 }
 
