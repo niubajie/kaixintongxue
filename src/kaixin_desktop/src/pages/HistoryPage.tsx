@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchDeployHistory, type DeployHistoryRun } from "../deployApi";
+import { fetchDeployHistory, resumeDeploy, retryDeployStep, type DeployHistoryRun } from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
@@ -29,6 +29,32 @@ export function HistoryPage({ onNotice }: Props) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [runs, setRuns] = useState<DeployHistoryRun[]>([]);
   const [error, setError] = useState("");
+
+  const [busy, setBusy] = useState("");
+
+  const handleResume = async (runId: string) => {
+    setBusy(runId);
+    try {
+      await resumeDeploy(runId);
+      onNotice("已开始续装，请到「技能部署」查看进度并批准授权弹窗。");
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "续装失败");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleRetry = async (runId: string, order: number) => {
+    setBusy(runId);
+    try {
+      await retryDeployStep(runId, order);
+      onNotice(`已重试第 ${order} 步。`);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "重试失败");
+    } finally {
+      setBusy("");
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -112,6 +138,36 @@ export function HistoryPage({ onNotice }: Props) {
                     {STATE_LABEL[run.state] ?? run.state}
                   </span>
                 </div>
+                {(run.resumable || run.failedOrder > 0) && (
+                  <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                    {run.resumable && (
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        disabled={busy === run.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleResume(run.id);
+                        }}
+                      >
+                        {busy === run.id ? "处理中…" : "继续安装"}
+                      </button>
+                    )}
+                    {run.failedOrder > 0 && (
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={busy === run.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleRetry(run.id, run.failedOrder);
+                        }}
+                      >
+                        重试第 {run.failedOrder} 步
+                      </button>
+                    )}
+                  </div>
+                )}
               </button>
             ))}
           </div>

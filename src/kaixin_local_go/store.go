@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -304,13 +305,37 @@ func (s *Store) RecordDeployRun(ctx context.Context, run DeployRun) error {
 	return err
 }
 
+// LoadDeployRun 读取单条运行记录（含步骤快照），续装与单步重试要用。
+func (s *Store) LoadDeployRun(ctx context.Context, id string) (DeployRun, error) {
+	var run DeployRun
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, state, started_at, COALESCE(finished_at,''), total_size_mb, log_path,
+		        steps_json, COALESCE(attempt, 1), COALESCE(error, '')
+		   FROM deploy_runs WHERE id = ?`, id).
+		Scan(&run.ID, &run.State, &run.StartedAt, &run.FinishedAt, &run.TotalSizeMb,
+			&run.LogPath, &run.StepsJSON, &run.Attempt, &run.Error)
+	return run, err
+}
+
+// SaveDeploySteps 每完成一步就落一次快照，崩溃后能知道做到哪一步。
+func (s *Store) SaveDeploySteps(ctx context.Context, id, stepsJSON, state, logPath string) error {
+	now := time.Now().UTC()
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE deploy_runs
+		    SET steps_json = ?, state = ?, log_path = ?, heartbeat_at = ?, lease_until = ?
+		  WHERE id = ?`,
+		stepsJSON, state, logPath, now.Format(time.RFC3339),
+		now.Add(deployLease).Format(time.RFC3339), id)
+	return err
+}
+
 func (s *Store) RecentDeployRuns(ctx context.Context, limit int) ([]DeployRun, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, state, started_at, COALESCE(finished_at,''), total_size_mb, log_path,
-		        COALESCE(attempt, 1), COALESCE(error, '')
+		        COALESCE(attempt, 1), COALESCE(error, ''), COALESCE(steps_json, '[]')
 		   FROM deploy_runs ORDER BY started_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -320,7 +345,7 @@ func (s *Store) RecentDeployRuns(ctx context.Context, limit int) ([]DeployRun, e
 	out := []DeployRun{}
 	for rows.Next() {
 		var r DeployRun
-		if err := rows.Scan(&r.ID, &r.State, &r.StartedAt, &r.FinishedAt, &r.TotalSizeMb, &r.LogPath, &r.Attempt, &r.Error); err != nil {
+		if err := rows.Scan(&r.ID, &r.State, &r.StartedAt, &r.FinishedAt, &r.TotalSizeMb, &r.LogPath, &r.Attempt, &r.Error, &r.StepsJSON); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -492,5 +517,30 @@ func (a *App) handleDeployHistory(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "读取部署历史失败: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+	// 附带「能否续装 / 失败在第几步」，前端据此显示继续与单步重试按钮
+	type runView struct {
+		DeployRun
+		Resumable   bool `json:"resumable"`
+		FailedOrder int  `json:"failedOrder"`
+	}
+	views := make([]runView, 0, len(runs))
+	for _, run := range runs {
+		view := runView{DeployRun: run}
+		var steps []DeployStepStatus
+		if run.StepsJSON != "" && json.Unmarshal([]byte(run.StepsJSON), &steps) == nil {
+			pending := 0
+			for _, step := range steps {
+				if step.Status == "done" {
+					continue
+				}
+				pending++
+				if step.Status == "failed" && view.FailedOrder == 0 {
+					view.FailedOrder = step.Order
+				}
+			}
+			view.Resumable = pending > 0 && run.State != "running"
+		}
+		views = append(views, view)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": views})
 }

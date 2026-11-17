@@ -182,6 +182,22 @@ func (a *App) setStep(step *DeployStepStatus, status, message string) {
 	a.deployLog("[%s] %s %s", step.Name, status, message)
 }
 
+// persistSteps 把当前步骤状态写回本地库，供崩溃后续装与单步重试使用。
+func (a *App) persistSteps(job *DeployJob) {
+	if a.store == nil {
+		return
+	}
+	a.deploy.mu.Lock()
+	payload, err := json.Marshal(job.Steps)
+	a.deploy.mu.Unlock()
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_ = a.store.SaveDeploySteps(ctx, job.ID, string(payload), "running", job.LogPath)
+}
+
 // startDeployHeartbeat 每 30 秒续租一次（租约 90 秒），任务结束后停止。
 func (a *App) startDeployHeartbeat(runID string) func() {
 	done := make(chan struct{})
@@ -206,6 +222,15 @@ func (a *App) startDeployHeartbeat(runID string) func() {
 }
 
 func (a *App) runDeploy(job *DeployJob, force bool) {
+	a.runDeployInner(job, force, false)
+}
+
+// runDeployResume 续装：跳过已完成（done）的步骤，只跑剩下的。
+func (a *App) runDeployResume(job *DeployJob, force bool) {
+	a.runDeployInner(job, force, true)
+}
+
+func (a *App) runDeployInner(job *DeployJob, force bool, resume bool) {
 	logFile, err := os.Create(job.LogPath)
 	if err == nil {
 		a.deploy.logFile = logFile
@@ -232,6 +257,11 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 	failed := false
 	cancelled := false
 	for _, step := range job.Steps {
+		// 续装时已完成步骤保持原状，不重复下载与解压（重复下载体积为零）
+		if resume && step.Status == "done" {
+			a.deployLog("[%s] 续装：已完成，跳过", step.Name)
+			continue
+		}
 		if a.cancelled() {
 			cancelled = true
 			a.setStep(step, "skipped", "任务已取消")
@@ -246,17 +276,24 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 			err = a.runAuthorizeStep(step)
 		} else {
 			entry := findSoftware(a.catalog, step.SoftwareID)
-			err = a.executeStep(step, entry, force)
+			if entry == nil {
+				err = fmt.Errorf("技能目录里找不到软件 %s", step.SoftwareID)
+			} else {
+				err = a.executeStep(step, entry, force)
+			}
 		}
 		if err != nil {
 			if errors.Is(err, errCancelled) || a.cancelled() {
 				cancelled = true
 				a.setStep(step, "skipped", "任务已取消")
+				a.persistSteps(job)
 				continue
 			}
+			// 失败不阻塞后续不相关步骤：记录后继续循环
 			a.setStep(step, "failed", err.Error())
 			failed = true
 		}
+		a.persistSteps(job)
 	}
 	a.deploy.mu.Lock()
 	a.deploy.running = false
@@ -442,7 +479,12 @@ func (a *App) installPortableZip(step *DeployStepStatus, entry *SoftwareEntry, t
 			a.setStep(step, "downloading", fmt.Sprintf("上一源失败，尝试备用源 %d/%d…", idx+1, len(urls)))
 		}
 		archivePath := filepath.Join(a.downloadDir, entry.ID+".zip")
-		if err := a.downloadFile(step, url, archivePath); err != nil {
+
+		// 已下载文件可复用：存在且校验值匹配时跳过下载（重复下载体积为零）
+		if a.reusableArchive(archivePath, entry.Install.SHA256) {
+			a.setStep(step, "downloading", "复用已下载的安装包，跳过下载")
+			a.deployLog("[%s] 复用已下载文件：%s", entry.Name, archivePath)
+		} else if err := a.downloadFile(step, url, archivePath); err != nil {
 			if errors.Is(err, errCancelled) || a.cancelled() {
 				return errCancelled
 			}
@@ -450,7 +492,7 @@ func (a *App) installPortableZip(step *DeployStepStatus, entry *SoftwareEntry, t
 			a.deployLog("[%s] 下载源 %d 失败：%v", entry.Name, idx+1, err)
 			continue
 		}
-		// 下载成功，校验并解压。
+		// 下载成功（或复用命中），校验并解压。
 		verified := false
 		if entry.Install.SHA256 != "" {
 			a.setStep(step, "verifying", "校验 SHA-256")

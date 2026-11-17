@@ -360,6 +360,8 @@ export interface DeployHistoryRun {
   logPath: string;
   attempt: number;
   error: string;
+  resumable: boolean;
+  failedOrder: number;
 }
 
 export async function fetchDeployHistory(): Promise<DeployHistoryRun[]> {
@@ -690,4 +692,33 @@ export async function checkUpdates(): Promise<UpdateCheckResult> {
     throw new Error(`检查更新失败（HTTP ${response.status}）`);
   }
   return (await response.json()) as UpdateCheckResult;
+}
+
+
+// ---------- 续装与单步重试（FR-SKL-18） ----------
+
+export async function resumeDeploy(runId: string): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/deploy/resume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `续装失败（HTTP ${response.status}）`);
+  }
+}
+
+export async function retryDeployStep(runId: string, order: number): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/deploy/retry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId, order })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `重试失败（HTTP ${response.status}）`);
+  }
 }

@@ -93,6 +93,8 @@ func main() {
 	mux.HandleFunc("GET /api/deploy/status", app.handleDeployStatus)
 	mux.HandleFunc("POST /api/deploy/cancel", app.handleDeployCancel)
 	mux.HandleFunc("GET /api/deploy/history", app.handleDeployHistory)
+	mux.HandleFunc("POST /api/deploy/resume", app.handleDeployResume)
+	mux.HandleFunc("POST /api/deploy/retry", app.handleDeployRetryStep)
 	mux.HandleFunc("GET /api/data/info", app.handleDataInfo)
 	mux.HandleFunc("GET /api/library/scan", app.handleLibraryScan)
 	mux.HandleFunc("POST /api/library/open", app.handleLibraryOpen)
