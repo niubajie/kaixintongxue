@@ -30,6 +30,7 @@ var indexableExt = map[string]bool{
 }
 
 type KBStatus struct {
+	Revision  int    `json:"revision"`
 	Path      string `json:"path"`
 	Name      string `json:"name"`
 	Chunks    int    `json:"chunks"`
@@ -167,6 +168,11 @@ func (s *Store) IndexFile(ctx context.Context, path string) KBStatus {
 		return status
 	}
 
+	// 追加修订：重新索引不会冲掉旧版本，可查历史、可回滚
+	if revision, revErr := s.recordRevision(ctx, id, string(raw), len(chunks), "index"); revErr == nil {
+		status.Revision = revision
+	}
+
 	status.Status = "indexed"
 	status.Chunks = len(chunks)
 	status.IndexedAt = now
@@ -186,7 +192,7 @@ func (s *Store) UnindexFile(ctx context.Context, path string) error {
 // KBStatusAll 返回全部已索引文档，供界面判断某个文件是否已在库中。
 func (s *Store) KBStatusAll(ctx context.Context) ([]KBStatus, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, chunks, status, error, COALESCE(indexed_at,'') FROM kb_documents`)
+		`SELECT id, name, chunks, status, error, COALESCE(indexed_at,''), COALESCE(revision,0) FROM kb_documents`)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +201,7 @@ func (s *Store) KBStatusAll(ctx context.Context) ([]KBStatus, error) {
 	out := []KBStatus{}
 	for rows.Next() {
 		var item KBStatus
-		if err := rows.Scan(&item.Path, &item.Name, &item.Chunks, &item.Status, &item.Error, &item.IndexedAt); err != nil {
+		if err := rows.Scan(&item.Path, &item.Name, &item.Chunks, &item.Status, &item.Error, &item.IndexedAt, &item.Revision); err != nil {
 			return nil, err
 		}
 		out = append(out, item)
@@ -206,8 +212,8 @@ func (s *Store) KBStatusAll(ctx context.Context) ([]KBStatus, error) {
 func (s *Store) KBStatusOf(ctx context.Context, path string) KBStatus {
 	var item KBStatus
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, chunks, status, error, COALESCE(indexed_at,'') FROM kb_documents WHERE id = ?`,
-		kbDocID(path)).Scan(&item.Path, &item.Name, &item.Chunks, &item.Status, &item.Error, &item.IndexedAt)
+		`SELECT id, name, chunks, status, error, COALESCE(indexed_at,''), COALESCE(revision,0) FROM kb_documents WHERE id = ?`,
+		kbDocID(path)).Scan(&item.Path, &item.Name, &item.Chunks, &item.Status, &item.Error, &item.IndexedAt, &item.Revision)
 	if err == sql.ErrNoRows {
 		return KBStatus{Path: path, Status: "absent"}
 	}

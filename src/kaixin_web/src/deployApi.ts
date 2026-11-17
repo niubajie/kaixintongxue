@@ -442,6 +442,7 @@ export interface KBDocument {
   name: string;
   chunks: number;
   status: string; // indexed / failed / unsupported / absent
+  revision?: number;
   error: string;
   indexedAt: string;
 }
@@ -707,4 +708,40 @@ export async function retryDeployStep(runId: string, order: number): Promise<voi
     const payload = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new Error(payload?.message ?? `重试失败（HTTP ${response.status}）`);
   }
+}
+
+
+// ---------- 知识库版本历史 ----------
+
+export interface KBRevision {
+  path: string;
+  revision: number;
+  chars: number;
+  chunks: number;
+  indexedAt: string;
+  source: string;
+}
+
+export async function fetchKBRevisions(path: string): Promise<KBRevision[]> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/revisions?path=${encodeURIComponent(path)}`);
+  if (!response.ok) {
+    throw new Error(`读取版本历史失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { revisions?: KBRevision[] };
+  return payload.revisions ?? [];
+}
+
+export async function rollbackKnowledgeBase(path: string, revision: number): Promise<KBDocument> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/rollback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, revision })
+  });
+  const payload = (await response.json().catch(() => null)) as (KBDocument & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `回滚失败（HTTP ${response.status}）`);
+  }
+  return payload;
 }

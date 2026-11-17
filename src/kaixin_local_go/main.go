@@ -104,6 +104,8 @@ func main() {
 	mux.HandleFunc("POST /api/kb/remove", app.handleKBRemove)
 	mux.HandleFunc("GET /api/kb/status", app.handleKBStatus)
 	mux.HandleFunc("GET /api/kb/search", app.handleKBSearch)
+	mux.HandleFunc("GET /api/kb/revisions", app.handleKBRevisions)
+	mux.HandleFunc("POST /api/kb/rollback", app.handleKBRollback)
 	mux.HandleFunc("GET /api/asr/status", app.handleASRStatus)
 	mux.HandleFunc("POST /api/asr/transcribe", app.handleASRTranscribe)
 	mux.HandleFunc("GET /api/system/autostart", app.handleAutostartGet)

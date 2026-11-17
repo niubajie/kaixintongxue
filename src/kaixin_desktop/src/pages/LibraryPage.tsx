@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { bridge } from "../platform";
 import {
+  fetchKBRevisions,
   fetchKBStatus,
   fetchLibraryScan,
+  rollbackKnowledgeBase,
   indexKnowledgeBase,
   indexKnowledgeBaseBatch,
   removeKnowledgeBase,
@@ -11,6 +13,7 @@ import {
   openLibraryFile,
   openLibraryFolder,
   type KBDocument,
+  type KBRevision,
   type LibraryItem,
   type LibraryScan
 } from "../deployApi";
@@ -31,6 +34,8 @@ export function LibraryPage({ onNotice }: Props) {
   const [kb, setKb] = useState<Record<string, KBDocument>>({});
   const [kbBusy, setKbBusy] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
+  const [revisions, setRevisions] = useState<KBRevision[] | null>(null);
+  const [revisionFor, setRevisionFor] = useState<string>("");
 
   const load = useCallback(async () => {
     setState("loading");
@@ -183,6 +188,29 @@ export function LibraryPage({ onNotice }: Props) {
       onNotice(err instanceof Error ? err.message : "批量移出失败");
     } finally {
       setKbBusy(false);
+    }
+  };
+
+  const openRevisions = async (path: string) => {
+    setRevisionFor(path);
+    setRevisions(null);
+    try {
+      setRevisions(await fetchKBRevisions(path));
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "读取版本历史失败");
+      setRevisions([]);
+    }
+  };
+
+  const handleRollback = async (path: string, revision: number) => {
+    try {
+      const result = await rollbackKnowledgeBase(path, revision);
+      setKb((current) => ({ ...current, [result.path]: result }));
+      onNotice(`已回滚到第 ${revision} 版（当前第 ${result.revision} 版）。`);
+      setRevisionFor("");
+      setRevisions(null);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "回滚失败");
     }
   };
 
@@ -407,9 +435,14 @@ export function LibraryPage({ onNotice }: Props) {
                     打开文件
                   </button>
                   {selectedKB?.status === "indexed" ? (
-                    <button type="button" className="secondary-btn" onClick={() => void handleUnindex()} disabled={kbBusy}>
-                      移出知识库
-                    </button>
+                    <>
+                      <button type="button" className="ghost-btn" onClick={() => void openRevisions(selected.path)}>
+                        版本历史
+                      </button>
+                      <button type="button" className="secondary-btn" onClick={() => void handleUnindex()} disabled={kbBusy}>
+                        移出知识库
+                      </button>
+                    </>
                   ) : (
                     <button type="button" className="secondary-btn" onClick={() => void handleIndex()} disabled={kbBusy}>
                       {kbBusy ? "处理中…" : "加入知识库"}
@@ -418,7 +451,7 @@ export function LibraryPage({ onNotice }: Props) {
                 </div>
                 <p className="caption" style={{ marginTop: 8 }}>
                   {selectedKB?.status === "indexed"
-                    ? `已入知识库 · ${selectedKB.chunks} 个切片 · ${selectedKB.indexedAt}`
+                    ? `已入知识库 · 第 ${selectedKB.revision ?? 1} 版 · ${selectedKB.chunks} 个切片 · ${selectedKB.indexedAt}`
                     : selectedKB?.status === "unsupported"
                       ? `未入知识库：${selectedKB.error}`
                       : selectedKB?.status === "failed"
@@ -429,6 +462,45 @@ export function LibraryPage({ onNotice }: Props) {
             ) : (
               <p className="caption">左侧选择一份资料查看详情。</p>
             )}
+          </div>
+        </div>
+      )}
+    
+      {revisionFor !== "" && (
+        <div className="dialog-mask" onClick={() => { setRevisionFor(""); setRevisions(null); }}>
+          <div className="dialog" onClick={(event) => event.stopPropagation()}>
+            <h2 className="dialog-title">版本历史</h2>
+            <p className="caption" style={{ marginTop: 6 }}>{revisionFor}</p>
+            {revisions === null ? (
+              <p className="caption" style={{ marginTop: 10 }}>读取中…</p>
+            ) : revisions.length === 0 ? (
+              <p className="caption" style={{ marginTop: 10 }}>还没有历史版本。</p>
+            ) : (
+              <div style={{ marginTop: 10 }}>
+                {revisions.map((item) => (
+                  <div className="row" key={item.revision} style={{ justifyContent: "space-between", marginTop: 6 }}>
+                    <span>
+                      第 {item.revision} 版 · {item.chars} 字 · {item.chunks} 切片
+                      <span className="caption">
+                        {" "}· {item.source === "rollback" ? "回滚生成" : "索引"} · {item.indexedAt}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => void handleRollback(revisionFor, item.revision)}
+                    >
+                      回滚到此版
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="dialog-actions">
+              <button type="button" className="secondary-btn" onClick={() => { setRevisionFor(""); setRevisions(null); }}>
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}
