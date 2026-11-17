@@ -12,7 +12,6 @@ const MEMBERS = [
 ];
 
 export function SystemPage({ onNotice }: Props) {
-  const [dryRun, setDryRun] = useState(true);
   const [speech, setSpeech] = useState(true);
   const [startup, setStartup] = useState(false);
 
@@ -91,24 +90,6 @@ export function SystemPage({ onNotice }: Props) {
         <div className="card">
           <h2 className="section-title">运行设置</h2>
           <div className="switch-row" style={{ marginTop: 6 }}>
-            <div>
-              <div style={{ fontSize: 12.5, fontWeight: 600 }}>安装演练模式</div>
-              <div className="caption" style={{ marginTop: 4 }}>
-                只检测与记录，不会真正安装软件
-              </div>
-            </div>
-            <button
-              type="button"
-              className={`segment${dryRun ? " active" : ""}`}
-              onClick={() => {
-                setDryRun(!dryRun);
-                onNotice(dryRun ? "已关闭安装演练模式，将执行真实安装。" : "已开启安装演练模式，只检测不安装。");
-              }}
-            >
-              {dryRun ? "已开启" : "已关闭"}
-            </button>
-          </div>
-          <div className="switch-row">
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 600 }}>语音播报</div>
               <div className="caption" style={{ marginTop: 4 }}>

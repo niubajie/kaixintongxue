@@ -22,9 +22,16 @@ const NAV: { key: PageKey; label: string; icon: string }[] = [
   { key: "update", label: "版本更新", icon: "\uE777" }
 ];
 
+// 演示入口只在开发构建出现：正式包不打包该入口（决策 Q-05）
+const DEMO_MODE = import.meta.env.DEV;
+
 export default function App() {
   const [page, setPage] = useState<PageKey>("home");
-  const [notice, setNotice] = useState("方案为演示数据；点击部署会执行真实环境检测与软件安装。");
+  const [notice, setNotice] = useState(
+    DEMO_MODE
+      ? "方案为演示数据；点击部署会执行真实环境检测与软件安装。"
+      : "点击「技能部署」可选择技能并生成方案。"
+  );
   const [version, setVersion] = useState("0.5.0");
 
   // 版本号不再写死在界面里，统一从壳层读取
@@ -104,7 +111,7 @@ export default function App() {
           >
             关于
           </button>
-          <span className="demo-badge">页面演示模式</span>
+          {DEMO_MODE && <span className="demo-badge">页面演示模式</span>}
         </div>
         <div className="titlebar-right">
           <button
@@ -147,7 +154,7 @@ export default function App() {
                   className={`nav-item${page === item.key ? " active" : ""}`}
                   onClick={() => {
                     setPage(item.key);
-                    setNotice(`${item.label} · 页面演示模式`);
+                    setNotice(DEMO_MODE ? `${item.label} · 页面演示模式` : item.label);
                   }}
                 >
                   <span className="nav-icon" style={{ fontFamily: "Segoe MDL2 Assets" }}>
