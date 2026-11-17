@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -46,7 +47,10 @@ type LibraryScan struct {
 	ScannedAt string        `json:"scannedAt"`
 }
 
-func libraryRoot() string {
+const libraryDirKey = "library.dir"
+
+// defaultLibraryRoot：约定的默认目录。
+func defaultLibraryRoot() string {
 	if custom := os.Getenv("KAIXIN_LIBRARY_DIR"); custom != "" {
 		return custom
 	}
@@ -73,6 +77,19 @@ func formatBytes(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
+}
+
+// resolveLibraryRoot：环境变量 > 本地库设置 > 默认约定目录。
+func (a *App) resolveLibraryRoot() string {
+	if custom := os.Getenv("KAIXIN_LIBRARY_DIR"); custom != "" {
+		return custom
+	}
+	if a.store != nil {
+		if value, err := a.store.GetSetting(context.Background(), libraryDirKey); err == nil && strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return defaultLibraryRoot()
 }
 
 // fileType 把扩展名转成界面上好认的类型名。
@@ -203,6 +220,31 @@ func ensureInside(root, target string) error {
 	return nil
 }
 
+// handleLibrarySetDir：把用户选中的目录记为资料库根目录。
+func (a *App) handleLibrarySetDir(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Path string `json:"path"`
+	}
+	if err := decodeJSON(r, &request); err != nil || strings.TrimSpace(request.Path) == "" {
+		fail(w, http.StatusBadRequest, "缺少目录路径")
+		return
+	}
+	info, err := os.Stat(request.Path)
+	if err != nil || !info.IsDir() {
+		fail(w, http.StatusBadRequest, "目录不存在或不是文件夹")
+		return
+	}
+	if a.store == nil {
+		fail(w, http.StatusServiceUnavailable, "本地库未初始化，无法保存设置")
+		return
+	}
+	if err := a.store.SetSetting(r.Context(), libraryDirKey, request.Path); err != nil {
+		fail(w, http.StatusInternalServerError, "保存资料目录失败："+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, scanLibrary(request.Path))
+}
+
 func openPath(path string) error {
 	switch runtime.GOOS {
 	case "windows":
@@ -228,7 +270,7 @@ func openFolder(path string) error {
 // ---------- HTTP ----------
 
 func (a *App) handleLibraryScan(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, scanLibrary(libraryRoot()))
+	writeJSON(w, http.StatusOK, scanLibrary(a.resolveLibraryRoot()))
 }
 
 func (a *App) handleLibraryOpen(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +281,7 @@ func (a *App) handleLibraryOpen(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "缺少文件路径")
 		return
 	}
-	root := libraryRoot()
+	root := a.resolveLibraryRoot()
 	if err := ensureInside(root, request.Path); err != nil {
 		fail(w, http.StatusForbidden, err.Error())
 		return
@@ -256,7 +298,7 @@ func (a *App) handleLibraryOpen(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleLibraryOpenFolder(w http.ResponseWriter, r *http.Request) {
-	root := libraryRoot()
+	root := a.resolveLibraryRoot()
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		fail(w, http.StatusInternalServerError, "创建资料目录失败："+err.Error())
 		return

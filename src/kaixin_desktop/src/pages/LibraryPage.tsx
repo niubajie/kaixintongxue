@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { bridge } from "../platform";
 import {
   fetchLibraryScan,
+  setLibraryDir,
   openLibraryFile,
   openLibraryFolder,
   type LibraryItem,
@@ -69,6 +71,29 @@ export function LibraryPage({ onNotice }: Props) {
     }
   };
 
+  const handlePickFolder = async () => {
+    let picked: string | null = null;
+    try {
+      picked = await bridge.pickFolder();
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "无法打开文件夹选择器");
+      return;
+    }
+    if (!picked) {
+      onNotice("未选择资料文件夹。");
+      return;
+    }
+    try {
+      const result = await setLibraryDir(picked);
+      setScan(result);
+      setState("ready");
+      setGroup(ALL);
+      onNotice(`已切换资料目录：${picked}`);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "切换资料目录失败");
+    }
+  };
+
   const handleOpenFolder = async () => {
     try {
       await openLibraryFolder();
@@ -83,11 +108,14 @@ export function LibraryPage({ onNotice }: Props) {
       <div className="page-head">
         <div>
           <h1 className="page-title">本地资料</h1>
-          <p className="page-subtitle">读取本机资料目录，按大类浏览并打开原文件</p>
+          <p className="page-subtitle">选择任意文件夹作为资料库，按大类浏览并打开原文件</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          <button type="button" className="primary-btn" onClick={() => void handlePickFolder()}>
+            选择资料文件夹
+          </button>
           <button type="button" className="secondary-btn" onClick={() => void handleOpenFolder()}>
-            打开资料文件夹
+            打开当前目录
           </button>
           <button type="button" className="primary-btn" onClick={() => void load()} disabled={state === "loading"}>
             {state === "loading" ? "扫描中…" : "重新扫描"}

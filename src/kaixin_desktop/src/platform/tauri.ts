@@ -16,13 +16,20 @@ export function createTauriBridge(): DesktopBridge {
     capabilities: {
       windowControls: true,
       appVersion: true,
-      localService: true
+      localService: true,
+      pickFolder: true
     },
 
     async getAppVersion(): Promise<string> {
       const { invoke } = await import("@tauri-apps/api/core");
       // 对应 src-tauri/src/lib.rs 里的 app_version 命令
       return invoke<string>("app_version");
+    },
+
+    async pickFolder(): Promise<string | null> {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ directory: true, multiple: false, title: "选择资料文件夹" });
+      return typeof picked === "string" && picked ? picked : null;
     },
 
     async getLocalServicePort(): Promise<number> {

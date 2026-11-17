@@ -9,11 +9,17 @@ export const webBridge: DesktopBridge = {
   capabilities: {
     windowControls: false,
     appVersion: false,
-    localService: false
+    localService: false,
+    pickFolder: false
   },
 
   async getAppVersion(): Promise<string> {
     return "web";
+  },
+
+  async pickFolder(): Promise<string | null> {
+    // 浏览器没有系统文件夹选择器
+    return null;
   },
 
   async getLocalServicePort(): Promise<number> {

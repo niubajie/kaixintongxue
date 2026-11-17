@@ -87,6 +87,7 @@ func main() {
 	mux.HandleFunc("GET /api/library/scan", app.handleLibraryScan)
 	mux.HandleFunc("POST /api/library/open", app.handleLibraryOpen)
 	mux.HandleFunc("POST /api/library/open-folder", app.handleLibraryOpenFolder)
+	mux.HandleFunc("POST /api/library/set-dir", app.handleLibrarySetDir)
 	mux.HandleFunc("GET /api/skills/custom", app.handleListCustomSkills)
 	mux.HandleFunc("POST /api/skills/custom", app.handleSaveCustomSkill)
 	mux.HandleFunc("DELETE /api/skills/custom/{id}", app.handleDeleteCustomSkill)

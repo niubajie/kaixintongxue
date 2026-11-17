@@ -428,3 +428,18 @@ export async function openLibraryFolder(): Promise<void> {
     throw new Error(payload?.message ?? `打开文件夹失败（HTTP ${response.status}）`);
   }
 }
+
+
+export async function setLibraryDir(path: string): Promise<LibraryScan> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/set-dir`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path })
+  });
+  const payload = (await response.json().catch(() => null)) as (LibraryScan & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `切换资料目录失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}

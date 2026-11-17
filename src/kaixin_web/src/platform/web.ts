@@ -8,11 +8,17 @@ export const webBridge: DesktopBridge = {
 
   capabilities: {
     windowControls: false,
-    appVersion: false
+    appVersion: false,
+    pickFolder: false
   },
 
   async getAppVersion(): Promise<string> {
     return "1.0.0 web";
+  },
+
+  async pickFolder(): Promise<string | null> {
+    // 浏览器没有系统文件夹选择器
+    return null;
   },
 
   window: {

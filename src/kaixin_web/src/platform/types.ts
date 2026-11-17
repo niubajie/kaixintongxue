@@ -9,9 +9,14 @@ export interface DesktopBridge {
   readonly capabilities: {
     windowControls: boolean;
     appVersion: boolean;
+    /** 能否弹出系统文件夹选择器（仅桌面端为真） */
+    pickFolder: boolean;
   };
 
   getAppVersion(): Promise<string>;
+
+  /** 弹出系统文件夹选择器；用户取消或环境不支持时返回 null。 */
+  pickFolder(): Promise<string | null>;
 
   window: {
     minimize(): Promise<void>;
