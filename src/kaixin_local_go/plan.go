@@ -236,6 +236,34 @@ func BuildPlan(entries []SoftwareEntry, skills []SkillSelection, extra []string,
 		}
 	}
 	plan.Warnings = warnings
+	// FR-SKL-07：本地硬件不足以流畅运行本地模型时，补三个云端模型
+	// （免费 / 有免费额度 / 收费最强各一个），由用户按需选用其一。
+	if hw != nil && containsLocalModel(entries, plan.Steps) && localInsufficient(hw) {
+		added := 0
+		for _, id := range []string{"cloud-free", "cloud-quota", "cloud-best"} {
+			entry := findSoftware(entries, id)
+			if entry == nil {
+				continue
+			}
+			plan.Steps = append(plan.Steps, PlanStep{
+				Order:      len(plan.Steps) + 1,
+				SoftwareID: entry.ID,
+				Name:       entry.Name,
+				Action:     "cloud",
+				SizeMb:     0,
+				Requires:   entry.Requires,
+				Note:       entry.Note,
+			})
+			added++
+		}
+		if added > 0 {
+			warnings = append(warnings, fmt.Sprintf(
+				"本地硬件不足以流畅运行所选模型，已补充 %d 个云端模型（免费 / 有免费额度 / 收费最强），选其一填好 API Key 即可。",
+				added))
+			plan.Warnings = warnings
+		}
+	}
+
 	return plan, nil
 }
 
@@ -270,4 +298,36 @@ func (a *App) handlePlan(w http.ResponseWriter, r *http.Request) {
 	if request.Mode == "upgrade" {
 	}
 	writeJSON(w, http.StatusOK, plan)
+}
+
+// containsLocalModel：方案里是否包含需要下载的本地模型。
+func containsLocalModel(entries []SoftwareEntry, steps []PlanStep) bool {
+	for _, step := range steps {
+		entry := findSoftware(entries, step.SoftwareID)
+		if entry == nil || entry.Kind != "model" {
+			continue
+		}
+		if entry.Install.Type != "cloud" {
+			return true
+		}
+	}
+	return false
+}
+
+// localInsufficient：判定本地是否跑不动本地模型。
+// 集成显卡、显存不足 6 GB、内存不足 16 GB 任一成立即视为不够。
+func localInsufficient(hw *HardwareInfo) bool {
+	if hw == nil {
+		return false
+	}
+	if hw.GPUIntegrated {
+		return true
+	}
+	if hw.GPUVramGb != nil && *hw.GPUVramGb > 0 && *hw.GPUVramGb < 6 {
+		return true
+	}
+	if hw.MemoryTotalGb > 0 && hw.MemoryTotalGb < 16 {
+		return true
+	}
+	return false
 }

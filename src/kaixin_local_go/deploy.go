@@ -452,6 +452,11 @@ func (a *App) executeStep(step *DeployStepStatus, entry *SoftwareEntry, force bo
 		a.setStep(step, "skipped", "该软件需手动安装："+entry.Note)
 		return nil
 	}
+	// 云端模型不下载任何文件，只需在设置里填 API Key
+	if entry.Install.Type == "cloud" {
+		a.setStep(step, "skipped", "云端模型无需安装："+entry.Note)
+		return nil
+	}
 	if !force {
 		if _, err := os.Stat(filepath.Join(targetDir, "manifest.json")); err == nil {
 			a.setStep(step, "skipped", "已安装，跳过（可勾选强制重装）")

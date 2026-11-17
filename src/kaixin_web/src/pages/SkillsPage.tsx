@@ -78,6 +78,7 @@ interface SkillDraft {
 const ACTION_LABEL: Record<string, string> = {
   extract: "下载并解压",
   "pull-model": "命令行安装",
+  cloud: "云端配置",
   manual: "手动安装"
 };
 
