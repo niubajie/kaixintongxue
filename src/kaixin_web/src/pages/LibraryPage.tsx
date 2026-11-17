@@ -5,12 +5,54 @@ interface Props {
   onNotice: (message: string) => void;
 }
 
+// 统计按当前列表实际计算，避免出现「统计 128 份、列表只有十几条」的矛盾。
+function parseSize(text: string): number {
+  const match = /([\d.]+)\s*(KB|MB|GB|B)/i.exec(text ?? "");
+  if (!match) {
+    return 0;
+  }
+  const value = Number(match[1]);
+  const unit = match[2].toUpperCase();
+  const factor = unit === "GB" ? 1024 ** 3 : unit === "MB" ? 1024 ** 2 : unit === "KB" ? 1024 : 1;
+  return Math.round(value * factor);
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function withinDays(dateText: string, days: number): boolean {
+  const match = /^(\d{1,2})-(\d{1,2})$/.exec(dateText ?? "");
+  if (!match) {
+    return false;
+  }
+  const now = new Date();
+  const target = new Date(now.getFullYear(), Number(match[1]) - 1, Number(match[2]));
+  const diff = now.getTime() - target.getTime();
+  return diff >= 0 && diff <= days * 24 * 60 * 60 * 1000;
+}
+
+function buildStats(docs: DocItem[]) {
+  const total = docs.length;
+  const groups = new Set(docs.map((item) => item.group)).size;
+  const thisWeek = docs.filter((item) => withinDays(item.date, 7)).length;
+  const bytes = docs.reduce((sum, item) => sum + parseSize(item.size), 0);
+  return { total, groups, thisWeek, sizeText: formatSize(bytes) };
+}
+
 export function LibraryPage({ onNotice }: Props) {
   const [group, setGroup] = useState("全部资料");
   const [category, setCategory] = useState("全部");
   const [expanded, setExpanded] = useState<string[]>(["工作资料"]);
   const [selectedId, setSelectedId] = useState(DOCS[0].id);
   const [keyword, setKeyword] = useState("");
+  const stats = useMemo(() => buildStats(DOCS), []);
 
   const filtered = useMemo(() => {
     return DOCS.filter((doc) => {
@@ -51,19 +93,19 @@ export function LibraryPage({ onNotice }: Props) {
       <div className="stats">
         <div className="card">
           <div className="caption">资料总数</div>
-          <div className="stat-value">128 份</div>
+          <div className="stat-value">{stats.total} 份</div>
         </div>
         <div className="card">
           <div className="caption">已接入知识库</div>
-          <div className="stat-value">96 份</div>
+          <div className="stat-value">{stats.groups} 类</div>
         </div>
         <div className="card">
           <div className="caption">本周新增</div>
-          <div className="stat-value">12 份</div>
+          <div className="stat-value">{stats.thisWeek} 份</div>
         </div>
         <div className="card">
           <div className="caption">占用空间</div>
-          <div className="stat-value">2.6 GB</div>
+          <div className="stat-value">{stats.sizeText}</div>
         </div>
       </div>
 
@@ -83,7 +125,7 @@ export function LibraryPage({ onNotice }: Props) {
             style={group === "全部资料" ? { background: "var(--accent-light)", color: "var(--accent)" } : undefined}
           >
             <span>全部资料</span>
-            <span className="caption">128 份</span>
+            <span className="caption">{stats.total} 份</span>
           </button>
           {CATEGORY_GROUPS.map((item) => (
             <div key={item.name}>

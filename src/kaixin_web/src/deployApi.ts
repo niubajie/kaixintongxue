@@ -333,3 +333,25 @@ export async function openSitePage(input: {
     throw new Error(payload?.message ?? `打开页面失败（HTTP ${response.status}）`);
   }
 }
+
+
+// ---------- 部署历史 ----------
+
+export interface DeployHistoryRun {
+  id: string;
+  state: string;
+  startedAt: string;
+  finishedAt?: string;
+  totalSizeMb: number;
+  logPath: string;
+}
+
+export async function fetchDeployHistory(): Promise<DeployHistoryRun[]> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/deploy/history`);
+  if (!response.ok) {
+    throw new Error(`读取部署历史失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { runs?: DeployHistoryRun[] };
+  return payload.runs ?? [];
+}
