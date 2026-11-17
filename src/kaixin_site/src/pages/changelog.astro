@@ -1,0 +1,33 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { CHANGELOG } from "../data/site";
+---
+
+<BaseLayout title="更新日志" path="/changelog">
+  <div class="page-head">
+    <div class="wrap">
+      <h1>更新日志</h1>
+      <p>只记录用户能感知的变化。内部重构不占版面。</p>
+    </div>
+  </div>
+
+  <div class="prose">
+    <div class="wrap">
+      {CHANGELOG.map((entry) => (
+        <article class="log-entry">
+          <h2>v{entry.version}</h2>
+          <div class="log-date">{entry.date}</div>
+          <ul>
+            {entry.items.map((item) => (
+              <li>{item}</li>
+            ))}
+          </ul>
+        </article>
+      ))}
+
+      <div class="note">
+        客户端内的「版本更新」页会从你配置的服务器拉取同样的版本说明；未配置服务器时只展示本地记录。
+      </div>
+    </div>
+  </div>
+</BaseLayout>

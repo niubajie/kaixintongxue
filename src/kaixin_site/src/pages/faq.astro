@@ -1,0 +1,28 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { FAQ } from "../data/site";
+---
+
+<BaseLayout title="常见问题" path="/faq">
+  <div class="page-head">
+    <div class="wrap">
+      <h1>常见问题</h1>
+      <p>安装、隐私、能力边界。没写到的可以在客户端里看对应页面的说明。</p>
+    </div>
+  </div>
+
+  <div class="prose">
+    <div class="wrap">
+      {FAQ.map((item) => (
+        <details class="faq-item">
+          <summary>{item.question}</summary>
+          <p>{item.answer}</p>
+        </details>
+      ))}
+
+      <div class="note" style="margin-top:24px">
+        折叠问答用原生 details 实现，全站默认不加载 JavaScript。
+      </div>
+    </div>
+  </div>
+</BaseLayout>

@@ -1,0 +1,86 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { DOWNLOAD } from "../data/site";
+---
+
+<BaseLayout title="下载" path="/download">
+  <div class="page-head">
+    <div class="wrap">
+      <h1>下载</h1>
+      <p>Windows 桌面版。安装包未做代码签名，首次运行会看到 SmartScreen 提示。</p>
+    </div>
+  </div>
+
+  <div class="prose">
+    <div class="wrap">
+      <div class="download-box">
+        <div>
+          {DOWNLOAD.windowsUrl ? (
+            <>
+              <a class="btn btn-primary" href={DOWNLOAD.windowsUrl} rel="noreferrer noopener">
+                下载 Windows 安装包（{DOWNLOAD.version}）
+              </a>
+              <p class="hero-note">下载后请核对文件大小：{DOWNLOAD.size}</p>
+            </>
+          ) : (
+            <>
+              <a class="btn" aria-disabled="true" role="link" tabindex="-1">
+                安装包尚未发布
+              </a>
+              <div class="note" style="margin-top:16px">
+                当前没有可下载的正式安装包。我们不放出占位链接——点进去拿到坏文件比没有按钮更糟。
+                发布后这里会直接给出下载地址与文件校验值。
+              </div>
+            </>
+          )}
+
+          <h2>安装步骤</h2>
+          <ol class="steps">
+            <li>确认系统是 64 位 Windows 10（1809+）或 Windows 11。</li>
+            <li>下载并运行安装包，按提示完成安装（默认装到当前用户目录，不需要管理员权限）。</li>
+            <li>首次启动会下载运行组件，需要联网，请保持窗口打开。</li>
+            <li>启动后到「系统设置」确认本地服务正常；需要云端能力时再填服务器地址。</li>
+          </ol>
+
+          <h2>SmartScreen 提示说明</h2>
+          <div class="warn">
+            安装包目前没有代码签名证书，Windows 会提示「已保护你的电脑」。
+            点<b>「更多信息」</b> → <b>「仍要运行」</b>即可。
+          </div>
+          <p>
+            这不是让你无条件信任：请只从本站下载，并核对发布页公布的文件大小与哈希值。
+            签名与自动更新会在正式版补齐。
+          </p>
+
+          <h2>系统要求</h2>
+          <ul>
+            {DOWNLOAD.requirements.map((item) => (
+              <li>{item}</li>
+            ))}
+          </ul>
+
+          <h2>卸载与数据</h2>
+          <p>
+            卸载程序只删除程序本体。你的资料、笔记与本地数据库保存在
+            <code>%LOCALAPPDATA%\Kaixin</code>，需要彻底清理时手动删除该目录。
+          </p>
+        </div>
+
+        <aside class="download-meta">
+          <dl>
+            <dt>版本</dt>
+            <dd>{DOWNLOAD.version}</dd>
+            <dt>更新日期</dt>
+            <dd>{DOWNLOAD.releasedAt}</dd>
+            <dt>体积</dt>
+            <dd>{DOWNLOAD.size}</dd>
+            <dt>平台</dt>
+            <dd>Windows 10 / 11（64 位）</dd>
+            <dt>状态</dt>
+            <dd>{DOWNLOAD.windowsUrl ? "可下载" : "尚未发布"}</dd>
+          </dl>
+        </aside>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

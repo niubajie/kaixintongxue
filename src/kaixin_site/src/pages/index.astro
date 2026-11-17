@@ -1,0 +1,158 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { DOWNLOAD, SITE } from "../data/site";
+
+const features = [
+  {
+    tag: "技能部署",
+    title: "说一句需求，它把软件装好",
+    body:
+      "描述你要做的事，它先检测硬件，再从软件库里匹配需要的工具，生成带顺序的方案。涉及网络不可达的源会自动换镜像。"
+  },
+  {
+    tag: "网站寻址",
+    title: "需要哪个网页，直接带你到那一页",
+    body:
+      "「把视频发到抖音」不只是打开抖音首页，而是定位到创作者发布页并填好内容。发布类操作最后一步一定由你点。"
+  },
+  {
+    tag: "本地资料",
+    title: "自己的文件夹就是知识库",
+    body:
+      "选一个文件夹当资料库，按子目录分类统计。纯文本类文件可切分入库并检索，全程在本机完成。"
+  },
+  {
+    tag: "离线语音",
+    title: "说话就能输入，音频不出本机",
+    body:
+      "接的是本机 Whisper，语音转文字在本机算完。没有上传、没有第三方 ASR 账单，断网也能用。"
+  },
+  {
+    tag: "多端一致",
+    title: "桌面、网页、手机同一套界面",
+    body:
+      "页面代码只依赖平台抽象层，换壳不改业务逻辑。桌面端能力（窗口控制、本地服务、文件选择）在浏览器里会自动降级。"
+  },
+  {
+    tag: "可核查",
+    title: "不确定的地方如实说",
+    body:
+      "没有接入的能力不会假装成功：更新服务没配置就说无法检查，语音模型没装就说不能转写。界面上的每个状态都能追到原因。"
+  }
+];
+---
+
+<BaseLayout title="首页" path="/">
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Windows 桌面 AI 智能体</span>
+        <h1>{SITE.name}</h1>
+        <p class="lead">{SITE.tagline}。用自然语言描述需求，它负责检测硬件、匹配技能、生成方案并执行。</p>
+        <div class="hero-actions">
+          {DOWNLOAD.windowsUrl ? (
+            <a class="btn btn-primary" href="/download">下载 Windows 版</a>
+          ) : (
+            <a class="btn btn-primary" href="/download">查看下载方式</a>
+          )}
+          <a class="btn btn-ghost" href="#features">了解功能</a>
+        </div>
+        <p class="hero-note">
+          当前版本 {DOWNLOAD.version} · 支持 Windows 10 / 11 · 本地数据优先
+        </p>
+      </div>
+
+      <div class="app-mock" aria-hidden="true">
+        <div class="app-mock-bar">
+          <span class="app-mock-dot"></span>
+          <span class="app-mock-dot"></span>
+          <span class="app-mock-dot"></span>
+          <span class="app-mock-title">{SITE.name}</span>
+        </div>
+        <div class="app-mock-body">
+          <div class="app-mock-nav">
+            <span class="active">新建任务</span>
+            <span>应用助手</span>
+            <span>目标助手</span>
+            <span>本地资料</span>
+            <span>技能部署</span>
+            <span>系统设置</span>
+          </div>
+          <div class="app-mock-main">
+            <span class="app-mock-chip">界面示意</span>
+            <div class="app-mock-line w70"></div>
+            <div class="app-mock-line"></div>
+            <div class="app-mock-line w45"></div>
+            <div class="app-mock-line"></div>
+            <div class="app-mock-line w70"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      <h2>它替你做的六件事</h2>
+      <p class="section-sub">
+        不讲概念，只说能落地的部分。以下每一项都可以在客户端里找到对应入口。
+      </p>
+      <div class="cards">
+        {features.map((feature) => (
+          <article class="card">
+            <span class="card-tag">{feature.tag}</span>
+            <h3>{feature.title}</h3>
+            <p>{feature.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>先说清楚边界</h2>
+      <p class="section-sub">
+        一个工具值不值得信任，取决于它敢不敢说自己做不到什么。
+      </p>
+      <div class="cards">
+        <article class="card">
+          <h3>发布类操作不会替你点「发布」</h3>
+          <p>
+            自动化分三级：只到页面、辅助填写、纯读取全自动。涉及对外发布时，最后一步永远留给你。
+          </p>
+        </article>
+        <article class="card">
+          <h3>私域文档不上传</h3>
+          <p>
+            资料、笔记、知识库切片都存在本机。只有你主动配置云端模型或服务器时，相关请求才会发出，且界面会提示。
+          </p>
+        </article>
+        <article class="card">
+          <h3>没有的模型不会假装有</h3>
+          <p>
+            语音转写需要先在本地装 Whisper 模型；没装时界面会直说不可用，而不是给一段编出来的文字。
+          </p>
+        </article>
+        <article class="card">
+          <h3>安装包暂无代码签名</h3>
+          <p>
+            所以在 Windows 上首次运行会看到 SmartScreen 提示，属于预期行为，处理方式见
+            <a href="/download">下载页</a>。
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>现在就可以开始</h2>
+      <p class="section-sub">下载安装包，或用你已有的服务器地址接入云端能力。</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="/download">前往下载</a>
+        <a class="btn btn-ghost" href="/changelog">看看更新了什么</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
