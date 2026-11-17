@@ -200,8 +200,18 @@ func scanLibrary(root string) LibraryScan {
 	return scan
 }
 
-// ensureInside 防止通过接口打开资料目录以外的任意文件。
+// ensureInside 防止通过接口访问资料目录以外的文件。
+// 除「是否在目录内」外，还会校验 Windows 设备名、非法字符、结尾点与空格
+// （借鉴 Rakazo desktop-sandbox-paths 的做法）。
 func ensureInside(root, target string) error {
+	ok, err := containedIn(root, target)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("只能访问资料目录内的文件")
+	}
+
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -214,10 +224,7 @@ func ensureInside(root, target string) error {
 	if err != nil {
 		return err
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return fmt.Errorf("只能打开资料目录内的文件")
-	}
-	return nil
+	return validateRelativePath(rel)
 }
 
 // handleLibrarySetDir：把用户选中的目录记为资料库根目录。

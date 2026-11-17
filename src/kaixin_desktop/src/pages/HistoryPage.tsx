@@ -9,7 +9,8 @@ const STATE_LABEL: Record<string, string> = {
   done: "已完成",
   failed: "已失败",
   cancelled: "已取消",
-  running: "进行中"
+  running: "进行中",
+  interrupted: "已中断"
 };
 
 function formatTime(iso: string): string {
@@ -99,7 +100,13 @@ export function HistoryPage({ onNotice }: Props) {
                     <p className="list-card-detail">
                       {STATE_LABEL[run.state] ?? run.state}
                       {run.finishedAt ? ` · 结束于 ${formatTime(run.finishedAt)}` : ""}
+                      {run.attempt > 1 ? ` · 第 ${run.attempt} 次尝试` : ""}
                     </p>
+                    {run.error && (
+                      <p className="list-card-detail" style={{ color: "var(--danger)" }}>
+                        {run.error}
+                      </p>
+                    )}
                   </div>
                   <span className={`tag${run.state === "done" ? " accent" : ""}`}>
                     {STATE_LABEL[run.state] ?? run.state}

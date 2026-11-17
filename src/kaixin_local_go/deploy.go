@@ -182,6 +182,29 @@ func (a *App) setStep(step *DeployStepStatus, status, message string) {
 	a.deployLog("[%s] %s %s", step.Name, status, message)
 }
 
+// startDeployHeartbeat 每 30 秒续租一次（租约 90 秒），任务结束后停止。
+func (a *App) startDeployHeartbeat(runID string) func() {
+	done := make(chan struct{})
+	if a.store == nil {
+		return func() { close(done) }
+	}
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				_, _ = a.store.HeartbeatDeployRun(ctx, runID)
+				cancel()
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
 func (a *App) runDeploy(job *DeployJob, force bool) {
 	logFile, err := os.Create(job.LogPath)
 	if err == nil {
@@ -189,6 +212,23 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 		defer func() { _ = logFile.Close() }()
 	}
 	a.deployLog("部署任务 %s 开始，共 %d 步", job.ID, len(job.Steps))
+
+	// 先落一条 running 记录并领取租约：进程崩了也能被回收成「已中断」
+	// （借鉴 Rakazo 的 run lease，避免界面永远停在「进行中」）
+	if a.store != nil {
+		totalMb := 0
+		for _, step := range job.Steps {
+			totalMb += step.SizeMb
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = a.store.StartDeployRun(ctx, DeployRun{
+			ID: job.ID, StartedAt: job.StartedAt, TotalSizeMb: totalMb, LogPath: job.LogPath,
+		})
+		cancel()
+	}
+	stopHeartbeat := a.startDeployHeartbeat(job.ID)
+	defer stopHeartbeat()
+
 	failed := false
 	cancelled := false
 	for _, step := range job.Steps {
@@ -242,11 +282,20 @@ func (a *App) runDeploy(job *DeployJob, force bool) {
 			total += step.SizeMb
 		}
 		stepsJSON, _ := json.Marshal(job.Steps)
+		failureReason := ""
+		if job.State == "failed" {
+			for _, s := range job.Steps {
+				if s.Status == "failed" {
+					failureReason = s.Name + "：" + s.Message
+					break
+				}
+			}
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = a.store.RecordDeployRun(ctx, DeployRun{
 			ID: job.ID, State: job.State, StartedAt: job.StartedAt,
 			FinishedAt: job.FinishedAt, TotalSizeMb: total,
-			LogPath: job.LogPath, StepsJSON: string(stepsJSON),
+			LogPath: job.LogPath, StepsJSON: string(stepsJSON), Error: failureReason,
 		})
 		cancel()
 	}

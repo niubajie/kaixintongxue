@@ -232,19 +232,75 @@ type DeployRun struct {
 	FinishedAt  string `json:"finishedAt"`
 	TotalSizeMb int    `json:"totalSizeMb"`
 	LogPath     string `json:"logPath"`
+	Attempt     int    `json:"attempt"`
+	Error       string `json:"error"`
 	StepsJSON   string `json:"-"`
+}
+
+const deployLease = 90 * time.Second
+
+// StartDeployRun 在执行前就落一条 running 记录并领取租约。
+// 进程崩溃时租约到期，由 SweepStaleDeployRuns 回收，界面不会永远停在「进行中」。
+func (s *Store) StartDeployRun(ctx context.Context, run DeployRun) error {
+	now := time.Now().UTC()
+	leaseUntil := now.Add(deployLease).Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO deploy_runs(id, state, started_at, finished_at, total_size_mb, log_path, steps_json,
+		                          attempt, heartbeat_at, lease_until, error)
+		 VALUES(?, 'running', ?, '', ?, ?, ?, 1, ?, ?, '')
+		 ON CONFLICT(id) DO UPDATE SET
+		   state = 'running', finished_at = '', attempt = deploy_runs.attempt + 1,
+		   heartbeat_at = excluded.heartbeat_at, lease_until = excluded.lease_until, error = ''`,
+		run.ID, run.StartedAt, run.TotalSizeMb, run.LogPath, run.StepsJSON,
+		now.Format(time.RFC3339), leaseUntil)
+	return err
+}
+
+// HeartbeatDeployRun 续租；返回 false 表示这条记录已不存在或被回收。
+func (s *Store) HeartbeatDeployRun(ctx context.Context, id string) (bool, error) {
+	now := time.Now().UTC()
+	leaseUntil := now.Add(deployLease).Format(time.RFC3339)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE deploy_runs SET heartbeat_at = ?, lease_until = ? WHERE id = ? AND state = 'running'`,
+		now.Format(time.RFC3339), leaseUntil, id)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+// SweepStaleDeployRuns 把租约过期的 running 记录标记为中断。
+// 与 Rakazo 的 reconciler 一样，回收的是「没人再续租」的任务，而不是靠进程内状态。
+func (s *Store) SweepStaleDeployRuns(ctx context.Context) (int64, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE deploy_runs
+		    SET state = 'failed',
+		        finished_at = ?,
+		        error = '任务中断：进程退出或崩溃，未收到结束信号'
+		  WHERE state = 'running' AND lease_until != '' AND lease_until < ?`,
+		now, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *Store) RecordDeployRun(ctx context.Context, run DeployRun) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO deploy_runs(id, state, started_at, finished_at, total_size_mb, log_path, steps_json)
-		 VALUES(?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO deploy_runs(id, state, started_at, finished_at, total_size_mb, log_path, steps_json, error)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   state = excluded.state,
 		   finished_at = excluded.finished_at,
 		   total_size_mb = excluded.total_size_mb,
-		   steps_json = excluded.steps_json`,
-		run.ID, run.State, run.StartedAt, run.FinishedAt, run.TotalSizeMb, run.LogPath, run.StepsJSON)
+		   steps_json = excluded.steps_json,
+		   error = excluded.error`,
+		run.ID, run.State, run.StartedAt, run.FinishedAt, run.TotalSizeMb, run.LogPath, run.StepsJSON, run.Error)
 	return err
 }
 
@@ -253,7 +309,8 @@ func (s *Store) RecentDeployRuns(ctx context.Context, limit int) ([]DeployRun, e
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, state, started_at, COALESCE(finished_at,''), total_size_mb, log_path, steps_json
+		`SELECT id, state, started_at, COALESCE(finished_at,''), total_size_mb, log_path,
+		        COALESCE(attempt, 1), COALESCE(error, '')
 		   FROM deploy_runs ORDER BY started_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -263,7 +320,7 @@ func (s *Store) RecentDeployRuns(ctx context.Context, limit int) ([]DeployRun, e
 	out := []DeployRun{}
 	for rows.Next() {
 		var r DeployRun
-		if err := rows.Scan(&r.ID, &r.State, &r.StartedAt, &r.FinishedAt, &r.TotalSizeMb, &r.LogPath, &r.StepsJSON); err != nil {
+		if err := rows.Scan(&r.ID, &r.State, &r.StartedAt, &r.FinishedAt, &r.TotalSizeMb, &r.LogPath, &r.Attempt, &r.Error); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -428,6 +485,8 @@ func (a *App) handleDeployHistory(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusServiceUnavailable, "本地库未初始化")
 		return
 	}
+	// 列历史前先回收过期租约，保证界面看到的状态是可信的
+	_, _ = a.store.SweepStaleDeployRuns(r.Context())
 	runs, err := a.store.RecentDeployRuns(r.Context(), 20)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, "读取部署历史失败: "+err.Error())

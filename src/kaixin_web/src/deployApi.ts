@@ -344,6 +344,8 @@ export interface DeployHistoryRun {
   finishedAt?: string;
   totalSizeMb: number;
   logPath: string;
+  attempt: number;
+  error: string;
 }
 
 export async function fetchDeployHistory(): Promise<DeployHistoryRun[]> {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -64,6 +65,15 @@ func main() {
 		defer store.Close()
 		app.store = store
 		log.Printf("本地库就绪: %s", filepath.Join(dataDir, "app.db"))
+	}
+
+	// 启动时回收上次异常退出留下的「进行中」部署记录（租约已过期）
+	if app.store != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if n, err := app.store.SweepStaleDeployRuns(ctx); err == nil && n > 0 {
+			log.Printf("回收 %d 条中断的部署记录", n)
+		}
+		cancel()
 	}
 
 	mux := http.NewServeMux()
