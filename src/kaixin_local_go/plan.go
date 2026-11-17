@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -24,54 +22,11 @@ type PlanStep struct {
 }
 
 type Plan struct {
-	Steps            []PlanStep              `json:"steps"`
-	AuthSteps        []PlanSiteAuth          `json:"authSteps"`
-	TotalSizeMb      int                     `json:"totalSizeMb"`
-	EstimatedMinutes int                     `json:"estimatedMinutes"`
-	Warnings         []string                `json:"warnings"`
-	Recommendation   *HardwareRecommendation `json:"recommendation,omitempty"`
-}
-
-// HardwareRecommendation：「AI 技能 + 硬件配置」模式下按所选技能反推的推荐硬件。
-type HardwareRecommendation struct {
-	MinMemoryGb int      `json:"minMemoryGb"`
-	MinVramGb   int      `json:"minVramGb"`
-	NeedDiskGb  float64  `json:"needDiskGb"`
-	Items       []string `json:"items"`
-}
-
-// buildRecommendation：汇总方案内各软件的内存/显存要求，并折算安装与解压所需磁盘。
-func buildRecommendation(entries []SoftwareEntry, steps []PlanStep, totalSizeMb int) *HardwareRecommendation {
-	rec := &HardwareRecommendation{Items: []string{}}
-	for _, step := range steps {
-		entry := findSoftware(entries, step.SoftwareID)
-		if entry == nil {
-			continue
-		}
-		if entry.MinMemoryGb > rec.MinMemoryGb {
-			rec.MinMemoryGb = entry.MinMemoryGb
-		}
-		if entry.MinVramGb > rec.MinVramGb {
-			rec.MinVramGb = entry.MinVramGb
-		}
-		need := []string{}
-		if entry.MinMemoryGb > 0 {
-			need = append(need, fmt.Sprintf("内存 %d GB", entry.MinMemoryGb))
-		}
-		if entry.MinVramGb > 0 {
-			need = append(need, fmt.Sprintf("显存 %d GB", entry.MinVramGb))
-		}
-		if len(need) > 0 {
-			rec.Items = append(rec.Items, fmt.Sprintf("%s：建议 %s", entry.Name, strings.Join(need, "、")))
-		}
-	}
-	// 下载 + 解压按两倍体积预留，向上取一位小数。
-	rec.NeedDiskGb = math.Ceil(float64(totalSizeMb)*2/1024*10) / 10
-	if rec.NeedDiskGb < 1 {
-		rec.NeedDiskGb = 1
-	}
-	rec.Items = append(rec.Items, fmt.Sprintf("安装与解压临时空间：建议至少 %.1f GB 可用磁盘", rec.NeedDiskGb))
-	return rec
+	Steps            []PlanStep     `json:"steps"`
+	AuthSteps        []PlanSiteAuth `json:"authSteps"`
+	TotalSizeMb      int            `json:"totalSizeMb"`
+	EstimatedMinutes int            `json:"estimatedMinutes"`
+	Warnings         []string       `json:"warnings"`
 }
 
 // PlanSiteAuth：技能涉及指定网站时的授权步骤，已授权的不再重复登录。
@@ -313,7 +268,6 @@ func (a *App) handlePlan(w http.ResponseWriter, r *http.Request) {
 	plan.AuthSteps = buildAuthSteps(a.sites, request.SiteIDs, a.authDir)
 	// 「AI 技能 + 硬件配置」模式：额外给出按技能反推的推荐硬件。
 	if request.Mode == "upgrade" {
-		plan.Recommendation = buildRecommendation(a.catalog, plan.Steps, plan.TotalSizeMb)
 	}
 	writeJSON(w, http.StatusOK, plan)
 }

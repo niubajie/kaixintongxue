@@ -82,20 +82,12 @@ export interface PlanSiteAuth {
 }
 
 // 「AI 技能 + 硬件配置」模式按所选技能反推的推荐硬件。
-export interface HardwareRecommendation {
-  minMemoryGb: number;
-  minVramGb: number;
-  needDiskGb: number;
-  items: string[];
-}
-
 export interface DeployPlan {
   steps: PlanStep[];
   authSteps: PlanSiteAuth[];
   totalSizeMb: number;
   estimatedMinutes: number;
   warnings: string[];
-  recommendation?: HardwareRecommendation;
 }
 
 export interface DeployStepStatus {
@@ -182,11 +174,10 @@ export function buildPlan(
   skills: SkillSelection[],
   extraSoftwareIds: string[],
   siteIds: string[] = [],
-  mode: "existing" | "upgrade" = "existing"
 ): Promise<DeployPlan> {
   return request<DeployPlan>("/api/deploy/plan", {
     method: "POST",
-    body: JSON.stringify({ skills, extraSoftwareIds, siteIds, mode })
+    body: JSON.stringify({ skills, extraSoftwareIds, siteIds })
   }, 40000);
 }
 
