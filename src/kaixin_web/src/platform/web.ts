@@ -9,11 +9,16 @@ export const webBridge: DesktopBridge = {
   capabilities: {
     windowControls: false,
     appVersion: false,
-    pickFolder: false
+    pickFolder: false,
+    pickFiles: false
   },
 
   async getAppVersion(): Promise<string> {
     return "1.0.0 web";
+  },
+
+  async pickFiles(): Promise<string[]> {
+    return [];
   },
 
   async pickFolder(): Promise<string | null> {

@@ -429,3 +429,76 @@ export async function setLibraryDir(path: string): Promise<LibraryScan> {
   }
   return payload;
 }
+
+
+// ---------- 本地知识库 ----------
+
+export interface KBDocument {
+  path: string;
+  name: string;
+  chunks: number;
+  status: string; // indexed / failed / unsupported / absent
+  error: string;
+  indexedAt: string;
+}
+
+export interface KBBatchResult {
+  ok: number;
+  failed: number;
+  skipped: number;
+  results: KBDocument[];
+}
+
+export interface KBSearchHit {
+  path: string;
+  name: string;
+  idx: number;
+  snippet: string;
+}
+
+export async function fetchKBStatus(): Promise<KBDocument[]> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/status`);
+  if (!response.ok) {
+    throw new Error(`读取知识库状态失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { documents?: KBDocument[] };
+  return payload.documents ?? [];
+}
+
+export async function indexKnowledgeBase(path: string): Promise<KBBatchResult> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/index`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `加入知识库失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as KBBatchResult;
+}
+
+export async function removeKnowledgeBase(path: string): Promise<void> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/remove`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `移出知识库失败（HTTP ${response.status}）`);
+  }
+}
+
+export async function searchKnowledgeBase(query: string): Promise<KBSearchHit[]> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) {
+    throw new Error(`检索失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { hits?: KBSearchHit[] };
+  return payload.hits ?? [];
+}

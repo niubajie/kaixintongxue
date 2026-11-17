@@ -16,6 +16,8 @@ export interface DesktopBridge {
     localService: boolean;
     /** 能否弹出系统文件夹选择器（仅桌面端为真） */
     pickFolder: boolean;
+    /** 能否多选文件（仅桌面端为真） */
+    pickFiles: boolean;
   };
 
   getAppVersion(): Promise<string>;
@@ -26,6 +28,9 @@ export interface DesktopBridge {
    * 组件与 deployApi 都不允许自己 import @tauri-apps/*。
    */
   getLocalServicePort(): Promise<number>;
+
+  /** 弹出系统文件选择器（可多选），返回所选文件路径；取消或环境不支持时返回空数组。 */
+  pickFiles(): Promise<string[]>;
 
   /**
    * 弹出系统文件夹选择器，返回所选目录；用户取消或环境不支持时返回 null。

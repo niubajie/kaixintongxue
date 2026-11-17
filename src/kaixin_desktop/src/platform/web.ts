@@ -10,7 +10,8 @@ export const webBridge: DesktopBridge = {
     windowControls: false,
     appVersion: false,
     localService: false,
-    pickFolder: false
+    pickFolder: false,
+    pickFiles: false
   },
 
   async getAppVersion(): Promise<string> {
@@ -20,6 +21,11 @@ export const webBridge: DesktopBridge = {
   async pickFolder(): Promise<string | null> {
     // 浏览器没有系统文件夹选择器
     return null;
+  },
+
+  async pickFiles(): Promise<string[]> {
+    // 浏览器里用 <input type=file>，此处不实现
+    return [];
   },
 
   async getLocalServicePort(): Promise<number> {

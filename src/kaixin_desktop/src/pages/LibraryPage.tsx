@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { bridge } from "../platform";
 import {
+  fetchKBStatus,
   fetchLibraryScan,
+  indexKnowledgeBase,
+  removeKnowledgeBase,
   setLibraryDir,
   openLibraryFile,
   openLibraryFolder,
+  type KBDocument,
   type LibraryItem,
   type LibraryScan
 } from "../deployApi";
@@ -22,13 +26,23 @@ export function LibraryPage({ onNotice }: Props) {
   const [group, setGroup] = useState(ALL);
   const [keyword, setKeyword] = useState("");
   const [selectedPath, setSelectedPath] = useState("");
+  const [kb, setKb] = useState<Record<string, KBDocument>>({});
+  const [kbBusy, setKbBusy] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
     setError("");
     try {
-      const result = await fetchLibraryScan();
+      const [result, kbDocs] = await Promise.all([
+        fetchLibraryScan(),
+        fetchKBStatus().catch(() => [] as KBDocument[])
+      ]);
       setScan(result);
+      const map: Record<string, KBDocument> = {};
+      for (const doc of kbDocs) {
+        map[doc.path] = doc;
+      }
+      setKb(map);
       setState("ready");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "扫描资料目录失败");
@@ -68,6 +82,52 @@ export function LibraryPage({ onNotice }: Props) {
       onNotice(`已用默认程序打开：${item.name}`);
     } catch (err: unknown) {
       onNotice(err instanceof Error ? err.message : "打开文件失败");
+    }
+  };
+
+  const selectedKB = selected ? kb[selected.path] : undefined;
+  const indexedCount = Object.values(kb).filter((doc) => doc.status === "indexed").length;
+
+  const handleIndex = async () => {
+    if (!selected) {
+      return;
+    }
+    setKbBusy(true);
+    try {
+      const result = await indexKnowledgeBase(selected.path);
+      const item = result.results[0];
+      if (item) {
+        setKb((current) => ({ ...current, [item.path]: item }));
+        onNotice(
+          item.status === "indexed"
+            ? `已加入知识库：${item.name}（${item.chunks} 个切片）`
+            : `未能加入：${item.error || item.status}`
+        );
+      }
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "加入知识库失败");
+    } finally {
+      setKbBusy(false);
+    }
+  };
+
+  const handleUnindex = async () => {
+    if (!selected) {
+      return;
+    }
+    setKbBusy(true);
+    try {
+      await removeKnowledgeBase(selected.path);
+      setKb((current) => {
+        const next = { ...current };
+        delete next[selected.path];
+        return next;
+      });
+      onNotice(`已移出知识库：${selected.name}`);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "移出知识库失败");
+    } finally {
+      setKbBusy(false);
     }
   };
 
@@ -129,8 +189,8 @@ export function LibraryPage({ onNotice }: Props) {
           <div className="stat-value">{scan?.total ?? 0} 份</div>
         </div>
         <div className="card">
-          <div className="caption">大类</div>
-          <div className="stat-value">{scan?.groups ?? 0} 类</div>
+          <div className="caption">已入知识库</div>
+          <div className="stat-value">{indexedCount} 份</div>
         </div>
         <div className="card">
           <div className="caption">本周新增</div>
@@ -244,16 +304,24 @@ export function LibraryPage({ onNotice }: Props) {
                   <button type="button" className="primary-btn" onClick={() => void handleOpenFile(selected)}>
                     打开文件
                   </button>
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={() => onNotice("加入知识库需要向量索引服务，尚未接入。")}
-                  >
-                    加入知识库
-                  </button>
+                  {selectedKB?.status === "indexed" ? (
+                    <button type="button" className="secondary-btn" onClick={() => void handleUnindex()} disabled={kbBusy}>
+                      移出知识库
+                    </button>
+                  ) : (
+                    <button type="button" className="secondary-btn" onClick={() => void handleIndex()} disabled={kbBusy}>
+                      {kbBusy ? "处理中…" : "加入知识库"}
+                    </button>
+                  )}
                 </div>
                 <p className="caption" style={{ marginTop: 8 }}>
-                  索引功能未接入，当前只做文件浏览与打开。
+                  {selectedKB?.status === "indexed"
+                    ? `已入知识库 · ${selectedKB.chunks} 个切片 · ${selectedKB.indexedAt}`
+                    : selectedKB?.status === "unsupported"
+                      ? `未入知识库：${selectedKB.error}`
+                      : selectedKB?.status === "failed"
+                        ? `上次索引失败：${selectedKB.error}`
+                        : "未加入知识库。当前支持纯文本类文件（txt / md / csv / json 等）。"}
                 </p>
               </>
             ) : (
