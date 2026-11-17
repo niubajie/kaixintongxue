@@ -20,6 +20,10 @@ export function GoalPage({ onNotice }: Props) {
   const [selectedId, setSelectedId] = useState(goals[0]?.id ?? "");
 
   const [formOpen, setFormOpen] = useState(false);
+
+  // FR-GOAL-02：生成方案后提问自动缩成一行，点下三角再展开
+  const [questionsOpen, setQuestionsOpen] = useState(false);
+  const [stageEditing, setStageEditing] = useState<{ id: string; value: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -154,6 +158,22 @@ export function GoalPage({ onNotice }: Props) {
   };
 
   const progress = selected ? progressOf(selected.stages) : 0;
+  const collapsedQuestions = Boolean(selected && selected.stages.length > 0 && !questionsOpen);
+
+  // FR-GOAL-06：阶段名称可调整
+  const renameStage = (stageId: string, name: string) => {
+    const value = name.trim();
+    if (!value) {
+      onNotice("阶段名称不能为空。");
+      return;
+    }
+    updateSelected((goal) => ({
+      ...goal,
+      stages: goal.stages.map((stage) => (stage.id === stageId ? { ...stage, name: value } : stage))
+    }));
+    setStageEditing(null);
+    onNotice("阶段名称已更新。");
+  };
 
   return (
     <div className="page">
@@ -219,14 +239,37 @@ export function GoalPage({ onNotice }: Props) {
                 </div>
               </div>
 
-              <div className="card" style={{ marginTop: 14 }}>
+              <div className="card" style={{ marginTop: 12 }}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
-                  <h3 className="section-title">AI 生成提问</h3>
-                  <button type="button" className="secondary-btn" onClick={generateQuestions}>
-                    {selected.questions.length > 0 ? "重新生成提问" : "生成提问"}
-                  </button>
+                  <span className="row" style={{ gap: 6 }}>
+                    <h3 className="section-title">AI 生成提问</h3>
+                    {collapsedQuestions && (
+                      <span className="caption">
+                        {selected.questions.length} 个提问 · 已用于生成方案
+                      </span>
+                    )}
+                  </span>
+                  <span className="row" style={{ gap: 6 }}>
+                    <button type="button" className="secondary-btn" onClick={generateQuestions}>
+                      {selected.questions.length > 0 ? "重新生成提问" : "生成提问"}
+                    </button>
+                    {selected.questions.length > 0 && selected.stages.length > 0 && (
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        title={questionsOpen ? "收起提问" : "展开提问"}
+                        onClick={() => setQuestionsOpen((current) => !current)}
+                      >
+                        {questionsOpen ? "▲" : "▼"}
+                      </button>
+                    )}
+                  </span>
                 </div>
-                {selected.questions.length > 0 ? (
+                {selected.questions.length === 0 ? (
+                  <p className="caption" style={{ marginTop: 10 }}>
+                    点击“生成提问”，AI 会围绕这个目标列出需要澄清的问题。
+                  </p>
+                ) : collapsedQuestions ? null : (
                   <div style={{ marginTop: 10 }}>
                     {selected.questions.map((question, index) => (
                       <div className="question-item" key={question}>
@@ -235,10 +278,6 @@ export function GoalPage({ onNotice }: Props) {
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="caption" style={{ marginTop: 10 }}>
-                    点击“生成提问”，AI 会围绕这个目标列出需要澄清的问题。
-                  </p>
                 )}
               </div>
 
@@ -262,7 +301,44 @@ export function GoalPage({ onNotice }: Props) {
                       {selected.stages.map((stage) => (
                         <div className="stage" key={stage.id}>
                           <div className="stage-head">
-                            <span className="stage-name">{stage.name}</span>
+                            {stageEditing?.id === stage.id ? (
+                              <span className="row" style={{ gap: 6, flex: 1 }}>
+                                <input
+                                  className="input"
+                                  value={stageEditing.value}
+                                  onChange={(event) =>
+                                    setStageEditing({ id: stage.id, value: event.target.value })
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      renameStage(stage.id, stageEditing.value);
+                                    }
+                                    if (event.key === "Escape") {
+                                      setStageEditing(null);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="primary-btn"
+                                  onClick={() => renameStage(stage.id, stageEditing.value)}
+                                >
+                                  保存
+                                </button>
+                              </span>
+                            ) : (
+                              <span className="row" style={{ gap: 6 }}>
+                                <span className="stage-name">{stage.name}</span>
+                                <button
+                                  type="button"
+                                  className="ghost-btn"
+                                  title="修改阶段名称"
+                                  onClick={() => setStageEditing({ id: stage.id, value: stage.name })}
+                                >
+                                  改名
+                                </button>
+                              </span>
+                            )}
                             <span className="tag">
                               {stage.steps.filter((step) => step.done).length}/{stage.steps.length}
                             </span>

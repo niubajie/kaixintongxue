@@ -3,8 +3,8 @@ import {
   buildLearningPlan,
   createId,
   generateLearningQuestions,
-  progressOf,
   SAMPLE_LEARNING,
+  completionGrade,
   scoreOf,
   usePersistentState,
   type LearningModule
@@ -115,6 +115,9 @@ export function LearningPage({ onNotice }: Props) {
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleTime, setScheduleTime] = useState("每天 20:00");
+
+  // FR-LRN-02：生成方案后提问自动缩成一行
+  const [questionsOpen, setQuestionsOpen] = useState(false);
   const [scheduleText, setScheduleText] = useState("");
 
   const [confirmModule, setConfirmModule] = useState<LearningModule | null>(null);
@@ -226,6 +229,16 @@ export function LearningPage({ onNotice }: Props) {
       onNotice("请填写定时任务内容。");
       return;
     }
+    // FR-LRN-04：时间格式非法时给出提示，而不是默默存进去
+    const timeMatch = /(\d{1,2})[:：](\d{2})/.exec(scheduleTime);
+    if (!timeMatch) {
+      onNotice("时间格式不正确，请写成「每天 20:00」这样的形式。");
+      return;
+    }
+    if (Number(timeMatch[1]) > 23 || Number(timeMatch[2]) > 59) {
+      onNotice("时间超出范围：小时需在 0–23，分钟需在 0–59。");
+      return;
+    }
     updateSelected((item) => ({
       ...item,
       schedules: [
@@ -273,8 +286,10 @@ export function LearningPage({ onNotice }: Props) {
     setConfirmSchedule(null);
   };
 
-  const progress = selected ? progressOf(selected.stages) : 0;
   const score = selected ? scoreOf(selected.stages) : { score: null, label: "待提升", detail: "" };
+  // FR-LRN-06：完成度等级（与 FR-LRN-07 的自评评分是两件事，都要显示）
+  const completion = selected ? completionGrade(selected.stages) : { percent: 0, label: "待提升" };
+  const collapsedQuestions = Boolean(selected && selected.stages.length > 0 && !questionsOpen);
   const nextSchedule = selected?.schedules.find((schedule) => !schedule.done);
 
   return (
@@ -347,8 +362,10 @@ export function LearningPage({ onNotice }: Props) {
 
               <div className="stats" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginTop: 14 }}>
                 <div className="card">
-                  <div className="caption">阶段完成度</div>
-                  <div className="stat-value">{progress}%</div>
+                  <div className="caption">完成度</div>
+                  <div className="stat-value">
+                    {completion.percent}% <span className="caption">{completion.label}</span>
+                  </div>
                 </div>
                 <div className="card">
                   <div className="caption">阶段评分</div>
@@ -370,12 +387,35 @@ export function LearningPage({ onNotice }: Props) {
 
               <div className="card" style={{ marginTop: 12 }}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
-                  <h3 className="section-title">AI 生成提问</h3>
-                  <button type="button" className="secondary-btn" onClick={generateQuestions}>
-                    {selected.questions.length > 0 ? "重新生成提问" : "生成提问"}
-                  </button>
+                  <span className="row" style={{ gap: 6 }}>
+                    <h3 className="section-title">AI 生成提问</h3>
+                    {collapsedQuestions && (
+                      <span className="caption">
+                        {selected.questions.length} 个提问 · 已用于生成方案
+                      </span>
+                    )}
+                  </span>
+                  <span className="row" style={{ gap: 6 }}>
+                    <button type="button" className="secondary-btn" onClick={generateQuestions}>
+                      {selected.questions.length > 0 ? "重新生成提问" : "生成提问"}
+                    </button>
+                    {selected.questions.length > 0 && selected.stages.length > 0 && (
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        title={questionsOpen ? "收起提问" : "展开提问"}
+                        onClick={() => setQuestionsOpen((current) => !current)}
+                      >
+                        {questionsOpen ? "▲" : "▼"}
+                      </button>
+                    )}
+                  </span>
                 </div>
-                {selected.questions.length > 0 ? (
+                {selected.questions.length === 0 ? (
+                  <p className="caption" style={{ marginTop: 10 }}>
+                    点击“生成提问”，AI 会先问清基础、时间与检验方式。
+                  </p>
+                ) : collapsedQuestions ? null : (
                   <div style={{ marginTop: 10 }}>
                     {selected.questions.map((question, index) => (
                       <div className="question-item" key={question}>
@@ -384,10 +424,6 @@ export function LearningPage({ onNotice }: Props) {
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="caption" style={{ marginTop: 10 }}>
-                    点击“生成提问”，AI 会先问清基础、时间与检验方式。
-                  </p>
                 )}
               </div>
 

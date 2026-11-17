@@ -101,6 +101,16 @@ export function progressOf(stages: PlanStage[]): number {
 }
 
 /**
+ * FR-LRN-06：完成度等级。按完成度百分比分档，与自评评分是两件事。
+ * ≥90 优秀、≥70 良好、≥40 合格、其余待提升。
+ */
+export function completionGrade(stages: PlanStage[]): { percent: number; label: string } {
+  const percent = progressOf(stages);
+  const label = percent >= 90 ? "优秀" : percent >= 70 ? "良好" : percent >= 40 ? "合格" : "待提升";
+  return { percent, label };
+}
+
+/**
  * 阶段学习评分：完成度只占 40%，其余 60% 来自各阶段的掌握度自评。
  * 没有自评时返回 null，界面显示「未评估」——不拿完成度冒充评分。
  */
@@ -130,7 +140,7 @@ export function scoreOf(stages: PlanStage[]): {
   );
   const score = Math.round(completion * 0.4 + mastery * 0.6);
 
-  const label = score >= 90 ? "优秀" : score >= 70 ? "良好" : score >= 40 ? "待提升" : "需重学";
+  const label = score >= 90 ? "优秀" : score >= 70 ? "良好" : score >= 40 ? "合格" : "待提升";
   return {
     score,
     label,
