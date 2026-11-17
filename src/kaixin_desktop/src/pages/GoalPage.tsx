@@ -121,6 +121,38 @@ export function GoalPage({ onNotice }: Props) {
     setConfirmTarget(null);
   };
 
+  // 方案可编辑：AI 生成的步骤允许人工增删（生成错时不必整体重来）
+  const addStep = (stageId: string, text: string) => {
+    const value = text.trim();
+    if (!value) {
+      return;
+    }
+    updateSelected((goal) => ({
+      ...goal,
+      stages: goal.stages.map((stage) =>
+        stage.id === stageId
+          ? {
+              ...stage,
+              steps: [...stage.steps, { id: `${stage.id}-${Date.now()}`, text: value, done: false }]
+            }
+          : stage
+      )
+    }));
+    onNotice("已添加步骤。");
+  };
+
+  const removeStep = (stageId: string, stepId: string) => {
+    updateSelected((goal) => ({
+      ...goal,
+      stages: goal.stages.map((stage) =>
+        stage.id === stageId
+          ? { ...stage, steps: stage.steps.filter((step) => step.id !== stepId) }
+          : stage
+      )
+    }));
+    onNotice("已删除步骤。");
+  };
+
   const progress = selected ? progressOf(selected.stages) : 0;
 
   return (
@@ -236,15 +268,40 @@ export function GoalPage({ onNotice }: Props) {
                             </span>
                           </div>
                           {stage.steps.map((step) => (
-                            <label className="check-row" key={step.id}>
-                              <input
-                                type="checkbox"
-                                checked={step.done}
-                                onChange={() => toggleStep(stage.id, step.id)}
-                              />
-                              <span className={step.done ? "done-text" : ""}>{step.text}</span>
-                            </label>
+                            <div className="check-row" key={step.id}>
+                              <label className="check-row" style={{ flex: 1, padding: 0, margin: 0 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={step.done}
+                                  onChange={() => toggleStep(stage.id, step.id)}
+                                />
+                                <span className={step.done ? "done-text" : ""}>{step.text}</span>
+                              </label>
+                              <button
+                                type="button"
+                                className="ghost-btn"
+                                title="删除这一步"
+                                onClick={() => removeStep(stage.id, step.id)}
+                              >
+                                ✕
+                              </button>
+                            </div>
                           ))}
+                          <div className="row" style={{ marginTop: 6, gap: 6 }}>
+                            <input
+                              className="input"
+                              placeholder="补充一步…"
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter") {
+                                  return;
+                                }
+                                const target = event.currentTarget;
+                                addStep(stage.id, target.value);
+                                target.value = "";
+                              }}
+                            />
+                            <span className="caption">回车添加</span>
+                          </div>
                         </div>
                       ))}
                     </div>

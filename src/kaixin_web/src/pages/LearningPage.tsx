@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   buildLearningPlan,
   createId,
@@ -19,6 +19,94 @@ interface Props {
 export function LearningPage({ onNotice }: Props) {
   const [modules, setModules] = usePersistentState<LearningModule[]>("kaixin.learning.v1", SAMPLE_LEARNING);
   const [selectedId, setSelectedId] = useState(modules[0]?.id ?? "");
+
+  const [notifyState, setNotifyState] = useState<string>("");
+
+  // 定时提醒：每 30 秒检查一次，命中「每天 HH:MM」就提醒一次。
+  // 只在应用运行期间生效；关掉应用后的提醒需要 Windows 计划任务，另行实现。
+  useEffect(() => {
+    const firedKey = "kaixin.reminders.fired";
+    const readFired = (): Record<string, string> => {
+      try {
+        return JSON.parse(localStorage.getItem(firedKey) ?? "{}") as Record<string, string>;
+      } catch {
+        return {};
+      }
+    };
+
+    const tick = () => {
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const today = now.toISOString().slice(0, 10);
+      const fired = readFired();
+      let changed = false;
+
+      for (const module of modules) {
+        for (const schedule of module.schedules ?? []) {
+          const match = /(\d{1,2})[:：](\d{2})/.exec(schedule.time ?? "");
+          if (!match) {
+            continue;
+          }
+          const target = `${match[1].padStart(2, "0")}:${match[2]}`;
+          if (target !== hhmm) {
+            continue;
+          }
+          const key = `${module.id}|${today}|${target}`;
+          if (fired[key]) {
+            continue;
+          }
+          fired[key] = new Date().toISOString();
+          changed = true;
+
+          const title = `该学习「${module.title}」了`;
+          const body = schedule.text || "按计划完成今天的一步。";
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            try {
+              new Notification(title, { body });
+            } catch {
+              // 部分环境不支持构造函数式通知，退回应用内提示
+            }
+          }
+          onNotice(`${title}：${body}`);
+        }
+      }
+
+      if (changed) {
+        try {
+          localStorage.setItem(firedKey, JSON.stringify(fired));
+        } catch {
+          // 存储满时忽略，最多重复提醒一次
+        }
+      }
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 30000);
+    return () => window.clearInterval(timer);
+  }, [modules, onNotice]);
+
+  const requestNotify = async () => {
+    if (typeof Notification === "undefined") {
+      setNotifyState("当前环境不支持系统通知，将只在应用内提醒");
+      onNotice("当前环境不支持系统通知，将只在应用内提醒。");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotifyState(
+        permission === "granted"
+          ? "系统通知已开启"
+          : permission === "denied"
+            ? "系统通知被拒绝，可稍后到浏览器/系统设置里开启"
+            : "未授权系统通知"
+      );
+      onNotice(permission === "granted" ? "系统通知已开启。" : "系统通知未开启，仍会在应用内提醒。");
+    } catch {
+      setNotifyState("申请通知权限失败");
+    }
+  };
+
+
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -342,6 +430,14 @@ export function LearningPage({ onNotice }: Props) {
                         onChange={() => toggleSchedule(schedule.id)}
                       />
                       <span className="tag accent">{schedule.time}</span>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        style={{ marginLeft: 6 }}
+                        onClick={() => void requestNotify()}
+                      >
+                        {notifyState || "开启系统通知"}
+                      </button>
                       <span className={schedule.done ? "done-text" : ""} style={{ flex: 1 }}>
                         {schedule.text}
                       </span>

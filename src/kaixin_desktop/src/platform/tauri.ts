@@ -42,6 +42,11 @@ export function createTauriBridge(): DesktopBridge {
       return Array.isArray(picked) ? picked : [picked];
     },
 
+    async getAppExePath(): Promise<string> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return invoke<string>("app_exe_path");
+    },
+
     async getLocalServicePort(): Promise<number> {
       const { invoke } = await import("@tauri-apps/api/core");
       // 对应 src-tauri/src/lib.rs 里的 local_service_port 命令；0 表示 sidecar 启动失败

@@ -32,6 +32,9 @@ export interface DesktopBridge {
   /** 弹出系统文件选择器（可多选），返回所选文件路径；取消或环境不支持时返回空数组。 */
   pickFiles(): Promise<string[]>;
 
+  /** 主程序可执行文件路径（桌面端用于写开机启动项）。 */
+  getAppExePath(): Promise<string>;
+
   /**
    * 弹出系统文件夹选择器，返回所选目录；用户取消或环境不支持时返回 null。
    */

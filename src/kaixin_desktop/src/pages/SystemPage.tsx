@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchAutostart, setAutostart } from "../deployApi";
+import { bridge } from "../platform";
 import { PERMISSIONS } from "../data";
 
 interface Props {
@@ -14,6 +16,40 @@ const MEMBERS = [
 export function SystemPage({ onNotice }: Props) {
   const [speech, setSpeech] = useState(true);
   const [startup, setStartup] = useState(false);
+  const [autostartBusy, setAutostartBusy] = useState(false);
+
+  // 真实读取注册表状态，而不是凭默认值
+  useEffect(() => {
+    let alive = true;
+    fetchAutostart()
+      .then((state) => {
+        if (alive) {
+          setStartup(state.enabled);
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setStartup(false);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const toggleAutostart = async () => {
+    setAutostartBusy(true);
+    try {
+      const exePath = await bridge.getAppExePath();
+      const next = await setAutostart(!startup, exePath);
+      setStartup(next.enabled);
+      onNotice(next.enabled ? "已设置开机自动启动。" : "已取消开机启动。");
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "设置开机启动失败");
+    } finally {
+      setAutostartBusy(false);
+    }
+  };
 
   return (
     <div className="page">
@@ -114,9 +150,10 @@ export function SystemPage({ onNotice }: Props) {
             <button
               type="button"
               className={`segment${startup ? " active" : ""}`}
-              onClick={() => setStartup(!startup)}
+              onClick={() => void toggleAutostart()}
+              disabled={autostartBusy}
             >
-              {startup ? "已开启" : "已关闭"}
+              {autostartBusy ? "处理中…" : startup ? "已开启" : "已关闭"}
             </button>
           </div>
         </div>

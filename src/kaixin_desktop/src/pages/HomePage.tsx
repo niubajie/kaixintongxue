@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ModelSelector } from "../components/ModelSelector";
 import { AI_MODELS, RECENT_QUESTIONS, type AiModelOption } from "../data";
 import { bridge } from "../platform";
+import { usePersistentState } from "../assistant";
 import { fetchASRStatus, transcribeAudio } from "../deployApi";
 
 interface Props {
@@ -27,6 +28,8 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
   const [voiceHint, setVoiceHint] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const [asrReady, setAsrReady] = useState<boolean | null>(null);
+  // 私域策略：开启后拒绝把内容交给云端模型
+  const [localOnly, setLocalOnly] = usePersistentState<boolean>("kaixin.privacy.localOnly", false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -198,6 +201,12 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
       onNotice("请先输入内容，再发送。");
       return;
     }
+    if (localOnly && !model.local) {
+      onNotice(
+        `已开启「仅本地模型」：${model.name} 是云端模型，内容会被上传。请切换到本地模型后再发送。`
+      );
+      return;
+    }
     if (attachments.length > 0) {
       onNotice(
         `已提交：${input.trim().slice(0, 20) || "（无文字）"}，附带 ${attachments.length} 个附件。模型调用尚未接入。`
@@ -275,6 +284,23 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
           <div className="panel-tools">
             <button type="button" className="icon-btn" title="添加附件" onClick={() => void pickAttachments()}>
               <span style={{ fontSize: 19, fontWeight: 300 }}>+</span>
+            </button>
+            <button
+              type="button"
+              className={`segment${localOnly ? " active" : ""}`}
+              title={localOnly ? "仅本地模型：内容不出本机" : "当前允许云端模型"}
+              onClick={() => {
+                const next = !localOnly;
+                setLocalOnly(next);
+                onNotice(
+                  next
+                    ? "已开启「仅本地模型」：发送前会检查所选模型，云端模型会被拒绝。"
+                    : "已关闭「仅本地模型」：内容可能被发送到云端模型。"
+                );
+              }}
+              style={{ marginLeft: 6 }}
+            >
+              {localOnly ? "仅本地" : "允许云端"}
             </button>
             <div className="panel-tools-right">
               <ModelSelector

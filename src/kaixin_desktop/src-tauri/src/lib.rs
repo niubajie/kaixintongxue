@@ -12,6 +12,14 @@ struct LocalService {
 }
 
 #[tauri::command]
+fn app_exe_path() -> String {
+    // 开机启动项要写向主程序自身，而不是 sidecar
+    std::env::current_exe()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
@@ -143,7 +151,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![app_version, local_service_port])
+        .invoke_handler(tauri::generate_handler![app_version, local_service_port, app_exe_path])
         .run(tauri::generate_context!())
         .expect("启动开心同学桌面端失败");
 }

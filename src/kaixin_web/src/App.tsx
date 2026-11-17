@@ -9,6 +9,9 @@ import { SystemPage } from "./pages/SystemPage";
 import { UpdatePage } from "./pages/UpdatePage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { bridge } from "./platform";
+import { ConfirmDialog } from "./components/ConfirmDialog";
+import { isDeploying } from "./runtimeState";
+import { cancelDeploy } from "./deployApi";
 import type { PageKey } from "./data";
 
 const NAV: { key: PageKey; label: string; icon: string }[] = [
@@ -33,6 +36,7 @@ export default function App() {
       : "点击「技能部署」可选择技能并生成方案。"
   );
   const [version, setVersion] = useState("0.5.0");
+  const [closeConfirm, setCloseConfirm] = useState(false);
 
   // 版本号不再写死在界面里，统一从壳层读取
   useEffect(() => {
@@ -134,7 +138,7 @@ export default function App() {
             <button
               type="button"
               className="window-btn close"
-              onClick={() => void bridge.window.close()}
+              onClick={() => (isDeploying() ? setCloseConfirm(true) : void bridge.window.close())}
               title="关闭"
             >
               ✕
@@ -190,6 +194,20 @@ export default function App() {
       </div>
 
       <footer className="notice">{notice}</footer>
+
+      <ConfirmDialog
+        open={closeConfirm}
+        title="部署任务还在进行"
+        detail="关闭窗口会停止当前部署，已完成的步骤会保留。确定要停止并关闭吗？"
+        confirmText="停止并关闭"
+        onCancel={() => setCloseConfirm(false)}
+        onConfirm={() => {
+          setCloseConfirm(false);
+          void cancelDeploy()
+            .catch(() => undefined)
+            .finally(() => bridge.window.close());
+        }}
+      />
     </div>
   );
 }

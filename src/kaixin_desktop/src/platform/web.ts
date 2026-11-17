@@ -28,6 +28,10 @@ export const webBridge: DesktopBridge = {
     return [];
   },
 
+  async getAppExePath(): Promise<string> {
+    return "";
+  },
+
   async getLocalServicePort(): Promise<number> {
     // 浏览器里没有 sidecar，使用本机默认端口（需要手动启动 kaixin-local）
     return DEFAULT_LOCAL_PORT;

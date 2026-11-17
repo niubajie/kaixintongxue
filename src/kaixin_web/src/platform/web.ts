@@ -17,6 +17,10 @@ export const webBridge: DesktopBridge = {
     return "1.0.0 web";
   },
 
+  async getAppExePath(): Promise<string> {
+    return "";
+  },
+
   async pickFiles(): Promise<string[]> {
     return [];
   },

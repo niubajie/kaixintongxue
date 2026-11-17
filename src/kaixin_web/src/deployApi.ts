@@ -542,3 +542,36 @@ export async function transcribeAudio(audioBase64: string, language = "zh"): Pro
   }
   return payload;
 }
+
+
+// ---------- 开机启动 ----------
+
+export interface AutostartState {
+  enabled: boolean;
+  command: string;
+  keyPath: string;
+  message: string;
+}
+
+export async function fetchAutostart(): Promise<AutostartState> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/system/autostart`);
+  if (!response.ok) {
+    throw new Error(`读取开机启动状态失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as AutostartState;
+}
+
+export async function setAutostart(enabled: boolean, exePath: string): Promise<AutostartState> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/system/autostart`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled, exePath })
+  });
+  const payload = (await response.json().catch(() => null)) as (AutostartState & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `设置开机启动失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { setDeploying } from "../runtimeState";
 import { usePersistentState } from "../assistant";
 import { HARDWARE_TIERS, SKILLS, type SkillOption } from "../data";
 import {
@@ -227,6 +228,12 @@ export function SkillsPage({ onNotice }: Props) {
       planResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [plan, planError]);
+
+  // 把「是否有部署在跑」同步给全局，供关闭保护使用
+  useEffect(() => {
+    setDeploying(Boolean(job && job.state === "running"));
+    return () => setDeploying(false);
+  }, [job]);
 
   // 部署任务轮询：running 时每 1.5 秒刷新一次。
   useEffect(() => {
@@ -612,7 +619,7 @@ export function SkillsPage({ onNotice }: Props) {
                 )}
               </span>
               <span className="skill-side">
-                <span className="tag">{active ? "已选" : `需 ${skill.demand} 核`}</span>
+                <span className="tag">{active ? "已选" : `能力 Lv.${skill.demand}`}</span>
                 <button
                   type="button"
                   className="skill-edit"

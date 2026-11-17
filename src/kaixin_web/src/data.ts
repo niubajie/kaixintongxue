@@ -13,6 +13,8 @@ export interface AiModelOption {
   name: string;
   cost: string;
   capability: string;
+  /** 是否本地模型：私域数据只允许走本地模型 */
+  local?: boolean;
 }
 
 export interface SkillMatch {
@@ -75,7 +77,7 @@ export interface HistoryItem {
 }
 
 export const AI_MODELS: AiModelOption[] = [
-  { name: "MiniCPM-o 4.5", cost: "免费开源，仅自部署硬件成本", capability: "中等，适配电脑维修视觉问答" },
+  { name: "MiniCPM-o 4.5", cost: "免费开源，仅自部署硬件成本", capability: "中等，适配电脑维修视觉问答", local: true },
   { name: "Qwen3-Omni-Flash Realtime", cost: "新用户免费试用额度，超量每千 token 约 0.01-0.03 元", capability: "中强，画面识别速度快" },
   { name: "豆包实时语音大模型", cost: "付费，每千 token 约 0.02-0.05 元", capability: "强，维修场景逻辑适配好" },
   { name: "火山引擎方舟实时方案", cost: "付费，按分钟约 0.1-0.2 元或 token 计费", capability: "强，主板元件识别精准" },
