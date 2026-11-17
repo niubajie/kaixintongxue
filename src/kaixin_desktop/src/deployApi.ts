@@ -516,3 +516,43 @@ export async function searchKnowledgeBase(query: string): Promise<KBSearchHit[]>
   const payload = (await response.json()) as { hits?: KBSearchHit[] };
   return payload.hits ?? [];
 }
+
+
+// ---------- 语音转写（本地 Whisper） ----------
+
+export interface ASRStatus {
+  available: boolean;
+  whisperPath: string;
+  modelPath: string;
+  ffmpegPath: string;
+  message: string;
+}
+
+export interface ASRResult {
+  text: string;
+  elapsedMs: number;
+  language: string;
+}
+
+export async function fetchASRStatus(): Promise<ASRStatus> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/asr/status`);
+  if (!response.ok) {
+    throw new Error(`读取语音转写状态失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as ASRStatus;
+}
+
+export async function transcribeAudio(audioBase64: string, language = "zh"): Promise<ASRResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/asr/transcribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audioBase64, language })
+  });
+  const payload = (await response.json().catch(() => null)) as (ASRResult & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `转写失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}

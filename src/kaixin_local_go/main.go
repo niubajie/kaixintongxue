@@ -92,6 +92,8 @@ func main() {
 	mux.HandleFunc("POST /api/kb/remove", app.handleKBRemove)
 	mux.HandleFunc("GET /api/kb/status", app.handleKBStatus)
 	mux.HandleFunc("GET /api/kb/search", app.handleKBSearch)
+	mux.HandleFunc("GET /api/asr/status", app.handleASRStatus)
+	mux.HandleFunc("POST /api/asr/transcribe", app.handleASRTranscribe)
 	mux.HandleFunc("GET /api/skills/custom", app.handleListCustomSkills)
 	mux.HandleFunc("POST /api/skills/custom", app.handleSaveCustomSkill)
 	mux.HandleFunc("DELETE /api/skills/custom/{id}", app.handleDeleteCustomSkill)

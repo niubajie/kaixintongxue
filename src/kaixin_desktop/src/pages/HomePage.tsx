@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ModelSelector } from "../components/ModelSelector";
 import { AI_MODELS, RECENT_QUESTIONS, type AiModelOption } from "../data";
 import { bridge } from "../platform";
+import { fetchASRStatus, transcribeAudio } from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
@@ -24,12 +25,34 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
   const [seconds, setSeconds] = useState(0);
   const [wave, setWave] = useState<number[]>([]);
   const [voiceHint, setVoiceHint] = useState("");
+  const [transcribing, setTranscribing] = useState(false);
+  const [asrReady, setAsrReady] = useState<boolean | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef(0);
   const timerRef = useRef(0);
+  const chunksRef = useRef<Blob[]>([]);
+
+  // 启动时探测本地转写是否就绪（二进制 + 模型 + ffmpeg）
+  useEffect(() => {
+    let alive = true;
+    fetchASRStatus()
+      .then((status) => {
+        if (alive) {
+          setAsrReady(status.available);
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setAsrReady(null);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const element = panelRef.current;
@@ -103,7 +126,13 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
       };
       tick();
 
+      chunksRef.current = [];
       const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
       recorder.start();
       recorderRef.current = recorder;
 
@@ -126,11 +155,42 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
     stopTracks();
     setRecording(false);
     setWave([]);
-    // 转写需要语音识别引擎（本地 Whisper 模型未安装），这里如实说明，不编造文字。
-    setVoiceHint(
-      `已录音 ${seconds} 秒。语音转写需要本地 Whisper 模型（尚未安装），当前不生成文字。`
-    );
-    onNotice("录音已结束。");
+    const chunks = chunksRef.current;
+    chunksRef.current = [];
+    if (chunks.length === 0) {
+      setVoiceHint(`已录音 ${seconds} 秒，但没有采集到音频数据。`);
+      return;
+    }
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    setTranscribing(true);
+    setVoiceHint(`已录音 ${seconds} 秒，正在本地转写…`);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
+      if (!base64) {
+        setTranscribing(false);
+        setVoiceHint("音频读取失败。");
+        return;
+      }
+      transcribeAudio(base64, "zh")
+        .then((result) => {
+          const text = result.text.trim();
+          if (text) {
+            setInput((current) => (current ? `${current} ${text}` : text));
+            setVoiceHint(`已转写（${Math.round(result.elapsedMs / 100) / 10} 秒，本地 Whisper）：${text}`);
+            onNotice("语音已转成文字，并插入输入框。");
+          } else {
+            setVoiceHint("转写完成，但没有识别到语音内容。");
+          }
+        })
+        .catch((err: unknown) => {
+          setVoiceHint(err instanceof Error ? err.message : "转写失败");
+        })
+        .finally(() => setTranscribing(false));
+    };
+    reader.readAsDataURL(blob);
   };
 
   const send = () => {
@@ -206,6 +266,8 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
             </div>
           )}
 
+          {transcribing && <p className="caption" style={{ padding: "0 2px 6px" }}>正在转写…</p>}
+
           {voiceHint && (
             <p className="caption" style={{ padding: "0 2px 6px" }}>{voiceHint}</p>
           )}
@@ -226,7 +288,7 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
               <button
                 type="button"
                 className="icon-btn"
-                title={recording ? "停止录音" : "语音输入"}
+                title={recording ? "停止录音" : asrReady === false ? "语音输入（本地转写不可用，仅录音）" : "语音输入"}
                 onClick={() => (recording ? stopRecording() : void startRecording())}
                 style={recording ? { background: "var(--accent-light)" } : undefined}
               >
