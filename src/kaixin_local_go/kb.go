@@ -342,17 +342,30 @@ func (a *App) handleKBRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request struct {
-		Path string `json:"path"`
+		Paths []string `json:"paths"`
+		Path  string   `json:"path"`
 	}
-	if err := decodeJSON(r, &request); err != nil || request.Path == "" {
+	if err := decodeJSON(r, &request); err != nil {
+		fail(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	paths := request.Paths
+	if len(paths) == 0 && request.Path != "" {
+		paths = []string{request.Path}
+	}
+	if len(paths) == 0 {
 		fail(w, http.StatusBadRequest, "缺少文件路径")
 		return
 	}
-	if err := a.store.UnindexFile(r.Context(), request.Path); err != nil {
-		fail(w, http.StatusInternalServerError, "移出知识库失败："+err.Error())
-		return
+
+	removed := []string{}
+	for _, path := range paths {
+		if err := a.store.UnindexFile(r.Context(), path); err != nil {
+			continue
+		}
+		removed = append(removed, path)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"removed": request.Path})
+	writeJSON(w, http.StatusOK, map[string]any{"removed": removed, "count": len(removed)})
 }
 
 func (a *App) handleKBStatus(w http.ResponseWriter, r *http.Request) {

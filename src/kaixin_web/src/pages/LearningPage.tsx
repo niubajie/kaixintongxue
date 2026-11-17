@@ -129,6 +129,16 @@ export function LearningPage({ onNotice }: Props) {
     setModules((current) => current.map((item) => (item.id === selected.id ? updater(item) : item)));
   };
 
+  // 掌握度自评：评分的一半以上来自这里，而不是完成度
+  const setMastery = (stageId: string, level: "good" | "ok" | "weak") => {
+    updateSelected((item) => ({
+      ...item,
+      stages: item.stages.map((stage) =>
+        stage.id === stageId ? { ...stage, mastery: stage.mastery === level ? undefined : level } : stage
+      )
+    }));
+  };
+
   const openCreate = () => {
     setEditingId(null);
     setTitle("");
@@ -264,7 +274,7 @@ export function LearningPage({ onNotice }: Props) {
   };
 
   const progress = selected ? progressOf(selected.stages) : 0;
-  const score = selected ? scoreOf(selected.stages) : { score: 0, label: "待提升" };
+  const score = selected ? scoreOf(selected.stages) : { score: null, label: "待提升", detail: "" };
   const nextSchedule = selected?.schedules.find((schedule) => !schedule.done);
 
   return (
@@ -290,7 +300,11 @@ export function LearningPage({ onNotice }: Props) {
                 <button type="button" className="side-item" onClick={() => setSelectedId(item.id)}>
                   <span className="side-item-title">{item.title}</span>
                   <span className="side-item-meta">
-                    {item.stages.length > 0 ? `评分 ${scoreOf(item.stages).score} 分` : "尚未生成方案"}
+                    {item.stages.length > 0
+                          ? scoreOf(item.stages).score === null
+                            ? "评分待自评"
+                            : `评分 ${scoreOf(item.stages).score} 分`
+                          : "尚未生成方案"}
                   </span>
                 </button>
                 <button
@@ -339,7 +353,11 @@ export function LearningPage({ onNotice }: Props) {
                 <div className="card">
                   <div className="caption">阶段评分</div>
                   <div className="stat-value">
-                    {score.score} <span className="caption">{score.label}</span>
+                    {score.score === null ? "—" : score.score}{" "}
+                    <span className="caption">{score.label}</span>
+                    {score.detail && (
+                      <div className="caption" style={{ marginTop: 4 }}>{score.detail}</div>
+                    )}
                   </div>
                 </div>
                 <div className="card">
@@ -388,6 +406,23 @@ export function LearningPage({ onNotice }: Props) {
                         <div className="stage" key={stage.id}>
                           <div className="stage-head">
                             <span className="stage-name">{stage.name}</span>
+                            <span className="row" style={{ gap: 4, marginLeft: 8 }}>
+                              {([
+                                { key: "good", label: "掌握" },
+                                { key: "ok", label: "一般" },
+                                { key: "weak", label: "未掌握" }
+                              ] as const).map((option) => (
+                                <button
+                                  key={option.key}
+                                  type="button"
+                                  className={`segment${stage.mastery === option.key ? " active" : ""}`}
+                                  style={{ fontSize: 11, padding: "2px 6px" }}
+                                  onClick={() => setMastery(stage.id, option.key)}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </span>
                             <span className="tag">
                               {stageDone}/{stage.steps.length} · 得分{" "}
                               {Math.round((stageDone / stage.steps.length) * 100)}

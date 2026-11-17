@@ -4,7 +4,9 @@ import {
   fetchKBStatus,
   fetchLibraryScan,
   indexKnowledgeBase,
+  indexKnowledgeBaseBatch,
   removeKnowledgeBase,
+  removeKnowledgeBaseBatch,
   setLibraryDir,
   openLibraryFile,
   openLibraryFolder,
@@ -28,6 +30,7 @@ export function LibraryPage({ onNotice }: Props) {
   const [selectedPath, setSelectedPath] = useState("");
   const [kb, setKb] = useState<Record<string, KBDocument>>({});
   const [kbBusy, setKbBusy] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -126,6 +129,58 @@ export function LibraryPage({ onNotice }: Props) {
       onNotice(`已移出知识库：${selected.name}`);
     } catch (err: unknown) {
       onNotice(err instanceof Error ? err.message : "移出知识库失败");
+    } finally {
+      setKbBusy(false);
+    }
+  };
+
+  const togglePicked = (path: string) => {
+    setPicked((current) =>
+      current.includes(path) ? current.filter((item) => item !== path) : [...current, path]
+    );
+  };
+
+  const togglePickAll = () => {
+    setPicked((current) =>
+      current.length === filtered.length ? [] : filtered.map((item) => item.path)
+    );
+  };
+
+  const handleBatchIndex = async () => {
+    if (picked.length === 0) {
+      return;
+    }
+    setKbBusy(true);
+    try {
+      const result = await indexKnowledgeBaseBatch(picked);
+      const next = { ...kb };
+      for (const item of result.results) {
+        next[item.path] = item;
+      }
+      setKb(next);
+      onNotice(`批量加入完成：成功 ${result.ok}，跳过 ${result.skipped}，失败 ${result.failed}`);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "批量加入失败");
+    } finally {
+      setKbBusy(false);
+    }
+  };
+
+  const handleBatchRemove = async () => {
+    if (picked.length === 0) {
+      return;
+    }
+    setKbBusy(true);
+    try {
+      const count = await removeKnowledgeBaseBatch(picked);
+      const next = { ...kb };
+      for (const path of picked) {
+        delete next[path];
+      }
+      setKb(next);
+      onNotice(`已从知识库移出 ${count} 份。`);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "批量移出失败");
     } finally {
       setKbBusy(false);
     }
@@ -260,6 +315,43 @@ export function LibraryPage({ onNotice }: Props) {
               onChange={(event) => setKeyword(event.target.value)}
               style={{ marginBottom: 10 }}
             />
+            {filtered.length > 0 && (
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <label className="check-row" style={{ padding: 0, margin: 0, gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={picked.length > 0 && picked.length === filtered.length}
+                    onChange={togglePickAll}
+                  />
+                  <span className="caption">全选（已选 {picked.length}）</span>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  disabled={picked.length === 0 || kbBusy}
+                  onClick={() => void handleBatchIndex()}
+                >
+                  批量加入知识库
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  disabled={picked.length === 0 || kbBusy}
+                  onClick={() => void handleBatchRemove()}
+                >
+                  批量移出
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={picked.length === 0}
+                  onClick={() => setPicked([])}
+                >
+                  清空选择
+                </button>
+              </div>
+            )}
+
             {filtered.length === 0 ? (
               <p className="caption" style={{ padding: "8px 4px" }}>
                 {scan.total === 0 ? "资料目录是空的，放文件进去后重新扫描。" : "没有匹配的资料。"}
@@ -275,6 +367,16 @@ export function LibraryPage({ onNotice }: Props) {
                     style={selected?.path === item.path ? { borderColor: "var(--accent)" } : undefined}
                   >
                     <div className="list-card-head">
+                      <input
+                        type="checkbox"
+                        checked={picked.includes(item.path)}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          togglePicked(item.path);
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                        style={{ marginRight: 8 }}
+                      />
                       <div>
                         <div className="list-card-title">{item.name}</div>
                         <p className="list-card-detail">

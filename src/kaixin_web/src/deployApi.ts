@@ -575,3 +575,32 @@ export async function setAutostart(enabled: boolean, exePath: string): Promise<A
   }
   return payload;
 }
+
+
+export async function indexKnowledgeBaseBatch(paths: string[]): Promise<KBBatchResult> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/index`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `批量加入失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as KBBatchResult;
+}
+
+export async function removeKnowledgeBaseBatch(paths: string[]): Promise<number> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/kb/remove`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths })
+  });
+  const payload = (await response.json().catch(() => null)) as { count?: number; message?: string } | null;
+  if (!response.ok) {
+    throw new Error(payload?.message ?? `批量移出失败（HTTP ${response.status}）`);
+  }
+  return payload?.count ?? 0;
+}

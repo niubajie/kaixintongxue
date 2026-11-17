@@ -31,7 +31,11 @@ export interface PlanStage {
   id: string;
   name: string;
   steps: PlanStep[];
+  /** 用户对该阶段的掌握度自评；未评时不参与评分 */
+  mastery?: MasteryLevel;
 }
+
+export type MasteryLevel = "good" | "ok" | "weak";
 
 export interface ScheduleItem {
   id: string;
@@ -86,21 +90,43 @@ export function progressOf(stages: PlanStage[]): number {
   return Math.round((steps.filter((step) => step.done).length / steps.length) * 100);
 }
 
-/** 阶段学习评分：按完成度换算成百分制，并给出对应评价。 */
-export function scoreOf(stages: PlanStage[]): { score: number; label: string } {
-  const score = progressOf(stages);
-  if (score >= 90) {
-    return { score, label: "优秀" };
+/**
+ * 阶段学习评分：完成度只占 40%，其余 60% 来自各阶段的掌握度自评。
+ * 没有自评时返回 null，界面显示「未评估」——不拿完成度冒充评分。
+ */
+export function scoreOf(stages: PlanStage[]): {
+  score: number | null;
+  label: string;
+  detail: string;
+} {
+  if (stages.length === 0) {
+    return { score: null, label: "尚未生成方案", detail: "" };
   }
-  if (score >= 70) {
-    return { score, label: "良好" };
-  }
-  if (score >= 40) {
-    return { score, label: "合格" };
-  }
-  return { score, label: "待提升" };
-}
 
+  const completion = progressOf(stages);
+  const assessed = stages.filter((stage) => stage.mastery);
+  const pending = stages.length - assessed.length;
+  if (pending > 0) {
+    return {
+      score: null,
+      label: "未评估",
+      detail: `完成度 ${completion}%，还有 ${pending} 个阶段未做掌握度自评`
+    };
+  }
+
+  const weight: Record<MasteryLevel, number> = { good: 100, ok: 60, weak: 20 };
+  const mastery = Math.round(
+    assessed.reduce((sum, stage) => sum + weight[stage.mastery as MasteryLevel], 0) / assessed.length
+  );
+  const score = Math.round(completion * 0.4 + mastery * 0.6);
+
+  const label = score >= 90 ? "优秀" : score >= 70 ? "良好" : score >= 40 ? "待提升" : "需重学";
+  return {
+    score,
+    label,
+    detail: `完成度 ${completion}% × 40% + 掌握度 ${mastery} × 60%`
+  };
+}
 function makeStage(name: string, steps: string[]): PlanStage {
   return {
     id: createId("st"),
