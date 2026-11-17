@@ -355,3 +355,62 @@ export async function fetchDeployHistory(): Promise<DeployHistoryRun[]> {
   const payload = (await response.json()) as { runs?: DeployHistoryRun[] };
   return payload.runs ?? [];
 }
+
+
+// ---------- 本地资料（真实文件） ----------
+
+export interface LibraryItem {
+  name: string;
+  path: string;
+  relPath: string;
+  group: string;
+  type: string;
+  size: number;
+  sizeText: string;
+  modTime: string;
+  date: string;
+}
+
+export interface LibraryScan {
+  root: string;
+  exists: boolean;
+  items: LibraryItem[];
+  total: number;
+  groups: number;
+  thisWeek: number;
+  sizeBytes: number;
+  sizeText: string;
+  truncated: boolean;
+  scannedAt: string;
+}
+
+export async function fetchLibraryScan(): Promise<LibraryScan> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/library/scan`);
+  if (!response.ok) {
+    throw new Error(`扫描资料目录失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as LibraryScan;
+}
+
+export async function openLibraryFile(path: string): Promise<void> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/library/open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `打开文件失败（HTTP ${response.status}）`);
+  }
+}
+
+export async function openLibraryFolder(): Promise<void> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/library/open-folder`, { method: "POST" });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `打开文件夹失败（HTTP ${response.status}）`);
+  }
+}

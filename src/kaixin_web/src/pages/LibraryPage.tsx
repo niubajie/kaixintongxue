@@ -1,77 +1,81 @@
-import { useMemo, useState } from "react";
-import { CATEGORY_GROUPS, DOCS, type DocItem } from "../data";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  fetchLibraryScan,
+  openLibraryFile,
+  openLibraryFolder,
+  type LibraryItem,
+  type LibraryScan
+} from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
 }
 
-// 统计按当前列表实际计算，避免出现「统计 128 份、列表只有十几条」的矛盾。
-function parseSize(text: string): number {
-  const match = /([\d.]+)\s*(KB|MB|GB|B)/i.exec(text ?? "");
-  if (!match) {
-    return 0;
-  }
-  const value = Number(match[1]);
-  const unit = match[2].toUpperCase();
-  const factor = unit === "GB" ? 1024 ** 3 : unit === "MB" ? 1024 ** 2 : unit === "KB" ? 1024 : 1;
-  return Math.round(value * factor);
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 ** 3) {
-    return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  }
-  if (bytes >= 1024 ** 2) {
-    return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  }
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
-
-function withinDays(dateText: string, days: number): boolean {
-  const match = /^(\d{1,2})-(\d{1,2})$/.exec(dateText ?? "");
-  if (!match) {
-    return false;
-  }
-  const now = new Date();
-  const target = new Date(now.getFullYear(), Number(match[1]) - 1, Number(match[2]));
-  const diff = now.getTime() - target.getTime();
-  return diff >= 0 && diff <= days * 24 * 60 * 60 * 1000;
-}
-
-function buildStats(docs: DocItem[]) {
-  const total = docs.length;
-  const groups = new Set(docs.map((item) => item.group)).size;
-  const thisWeek = docs.filter((item) => withinDays(item.date, 7)).length;
-  const bytes = docs.reduce((sum, item) => sum + parseSize(item.size), 0);
-  return { total, groups, thisWeek, sizeText: formatSize(bytes) };
-}
+const ALL = "全部资料";
 
 export function LibraryPage({ onNotice }: Props) {
-  const [group, setGroup] = useState("全部资料");
-  const [category, setCategory] = useState("全部");
-  const [expanded, setExpanded] = useState<string[]>(["工作资料"]);
-  const [selectedId, setSelectedId] = useState(DOCS[0].id);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [scan, setScan] = useState<LibraryScan | null>(null);
+  const [error, setError] = useState("");
+  const [group, setGroup] = useState(ALL);
   const [keyword, setKeyword] = useState("");
-  const stats = useMemo(() => buildStats(DOCS), []);
+  const [selectedPath, setSelectedPath] = useState("");
+
+  const load = useCallback(async () => {
+    setState("loading");
+    setError("");
+    try {
+      const result = await fetchLibraryScan();
+      setScan(result);
+      setState("ready");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "扫描资料目录失败");
+      setScan(null);
+      setState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of scan?.items ?? []) {
+      map.set(item.group, (map.get(item.group) ?? 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [scan]);
 
   const filtered = useMemo(() => {
-    return DOCS.filter((doc) => {
-      const groupMatch = group === "全部资料" || doc.group === group;
-      const categoryMatch = category === "全部" || doc.category === category;
-      const keywordMatch =
-        !keyword.trim() ||
-        doc.title.includes(keyword.trim()) ||
-        doc.summary.includes(keyword.trim());
-      return groupMatch && categoryMatch && keywordMatch;
+    const items = scan?.items ?? [];
+    const kw = keyword.trim();
+    return items.filter((item) => {
+      const groupMatch = group === ALL || item.group === group;
+      const keywordMatch = !kw || item.name.includes(kw) || item.relPath.includes(kw);
+      return groupMatch && keywordMatch;
     });
-  }, [group, category, keyword]);
+  }, [scan, group, keyword]);
 
-  const selected = filtered.find((doc) => doc.id === selectedId) ?? filtered[0] ?? docFallback;
+  const selected: LibraryItem | undefined =
+    filtered.find((item) => item.path === selectedPath) ?? filtered[0];
 
-  const toggleGroup = (name: string) => {
-    setExpanded((current) =>
-      current.includes(name) ? current.filter((item) => item !== name) : [...current, name]
-    );
+  const handleOpenFile = async (item: LibraryItem) => {
+    try {
+      await openLibraryFile(item.path);
+      onNotice(`已用默认程序打开：${item.name}`);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "打开文件失败");
+    }
+  };
+
+  const handleOpenFolder = async () => {
+    try {
+      await openLibraryFolder();
+      onNotice("已打开资料文件夹，把文件放进去后点「重新扫描」。");
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "打开文件夹失败");
+    }
   };
 
   return (
@@ -79,163 +83,157 @@ export function LibraryPage({ onNotice }: Props) {
       <div className="page-head">
         <div>
           <h1 className="page-title">本地资料</h1>
-          <p className="page-subtitle">按大类与小类浏览本机资料，查看统计看板与文档详情</p>
+          <p className="page-subtitle">读取本机资料目录，按大类浏览并打开原文件</p>
         </div>
-        <button
-          type="button"
-          className="secondary-btn"
-          onClick={() => onNotice("导入本地文件夹将在功能实现阶段接入。")}
-        >
-          导入资料
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          <button type="button" className="secondary-btn" onClick={() => void handleOpenFolder()}>
+            打开资料文件夹
+          </button>
+          <button type="button" className="primary-btn" onClick={() => void load()} disabled={state === "loading"}>
+            {state === "loading" ? "扫描中…" : "重新扫描"}
+          </button>
+        </div>
       </div>
 
       <div className="stats">
         <div className="card">
           <div className="caption">资料总数</div>
-          <div className="stat-value">{stats.total} 份</div>
+          <div className="stat-value">{scan?.total ?? 0} 份</div>
         </div>
         <div className="card">
-          <div className="caption">已接入知识库</div>
-          <div className="stat-value">{stats.groups} 类</div>
+          <div className="caption">大类</div>
+          <div className="stat-value">{scan?.groups ?? 0} 类</div>
         </div>
         <div className="card">
           <div className="caption">本周新增</div>
-          <div className="stat-value">{stats.thisWeek} 份</div>
+          <div className="stat-value">{scan?.thisWeek ?? 0} 份</div>
         </div>
         <div className="card">
           <div className="caption">占用空间</div>
-          <div className="stat-value">{stats.sizeText}</div>
+          <div className="stat-value">{scan?.sizeText ?? "0 B"}</div>
         </div>
       </div>
 
-      <div className="library-layout">
-        <div className="card" style={{ padding: 12 }}>
-          <div className="row" style={{ justifyContent: "space-between", padding: "0 4px 8px" }}>
-            <span className="section-title">资料分类</span>
-            <span className="tag">5 大类</span>
-          </div>
-          <button
-            type="button"
-            className="tree-group"
-            onClick={() => {
-              setGroup("全部资料");
-              setCategory("全部");
-            }}
-            style={group === "全部资料" ? { background: "var(--accent-light)", color: "var(--accent)" } : undefined}
-          >
-            <span>全部资料</span>
-            <span className="caption">{stats.total} 份</span>
-          </button>
-          {CATEGORY_GROUPS.map((item) => (
-            <div key={item.name}>
-              <button type="button" className="tree-group" onClick={() => toggleGroup(item.name)}>
-                <span className="row" style={{ gap: 8 }}>
-                  <span className="skill-icon" style={{ width: 20, height: 20, flex: "0 0 20px", fontSize: 10 }}>
-                    {item.icon}
-                  </span>
-                  {item.name}
-                </span>
-                <span className="caption">
-                  {item.count} {expanded.includes(item.name) ? "▾" : "▸"}
-                </span>
-              </button>
-              {expanded.includes(item.name) &&
-                item.children.map((child) => (
-                  <button
-                    type="button"
-                    key={child.name}
-                    className={`tree-sub${group === item.name && category === child.name ? " active" : ""}`}
-                    onClick={() => {
-                      setGroup(item.name);
-                      setCategory(child.name);
-                    }}
-                  >
-                    <span>{child.name}</span>
-                    <span>{child.count}</span>
-                  </button>
-                ))}
-            </div>
-          ))}
+      {state === "error" && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>扫描失败</div>
+          <p className="list-card-detail" style={{ marginTop: 6 }}>{error}</p>
+          <p className="caption" style={{ marginTop: 6 }}>
+            请确认本地服务已启动；资料目录不存在时会自动按空目录处理。
+          </p>
         </div>
+      )}
 
-        <div className="card">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <div>
-              <span className="section-title">
-                {group} / {category}
-              </span>
-              <div className="caption" style={{ marginTop: 5 }}>
-                共 {filtered.length} 份资料
-              </div>
+      {state !== "error" && scan && !scan.exists && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>还没有资料目录</div>
+          <p className="caption" style={{ marginTop: 6 }}>
+            点「打开资料文件夹」会自动创建并打开，把文件放进去后点「重新扫描」。
+          </p>
+          <p className="caption" style={{ marginTop: 4 }}>目录：{scan.root}</p>
+        </div>
+      )}
+
+      {state !== "error" && scan?.exists && (
+        <div className="library-layout">
+          <div className="card" style={{ padding: 12 }}>
+            <div className="row" style={{ justifyContent: "space-between", padding: "0 4px 8px" }}>
+              <span className="section-title">资料分类</span>
+              <span className="tag">{scan.groups} 大类</span>
             </div>
+            <button
+              type="button"
+              className="tree-group"
+              onClick={() => setGroup(ALL)}
+              style={group === ALL ? { background: "var(--accent-light)", color: "var(--accent)" } : undefined}
+            >
+              <span>{ALL}</span>
+              <span className="caption">{scan.total} 份</span>
+            </button>
+            {groups.map(([name, count]) => (
+              <button
+                type="button"
+                className="tree-group"
+                key={name}
+                onClick={() => setGroup(name)}
+                style={group === name ? { background: "var(--accent-light)", color: "var(--accent)" } : undefined}
+              >
+                <span>{name}</span>
+                <span className="caption">{count} 份</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="card" style={{ padding: 12 }}>
             <input
               className="input"
-              style={{ width: 200 }}
-              placeholder="搜索标题或摘要"
+              placeholder="按文件名或路径搜索"
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
+              style={{ marginBottom: 10 }}
             />
+            {filtered.length === 0 ? (
+              <p className="caption" style={{ padding: "8px 4px" }}>
+                {scan.total === 0 ? "资料目录是空的，放文件进去后重新扫描。" : "没有匹配的资料。"}
+              </p>
+            ) : (
+              <div className="list">
+                {filtered.slice(0, 200).map((item) => (
+                  <button
+                    type="button"
+                    className="list-card"
+                    key={item.path}
+                    onClick={() => setSelectedPath(item.path)}
+                    style={selected?.path === item.path ? { borderColor: "var(--accent)" } : undefined}
+                  >
+                    <div className="list-card-head">
+                      <div>
+                        <div className="list-card-title">{item.name}</div>
+                        <p className="list-card-detail">
+                          {item.group} · {item.type} · {item.sizeText} · {item.date}
+                        </p>
+                      </div>
+                      <span className="tag">{item.type}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 300px", gap: 14 }}>
-            <div>
-              {filtered.length === 0 && <div className="empty">该分类下暂无资料</div>}
-              {filtered.map((doc) => (
-                <button
-                  type="button"
-                  key={doc.id}
-                  className={`doc-row${selected.id === doc.id ? " selected" : ""}`}
-                  onClick={() => setSelectedId(doc.id)}
-                >
-                  <div className="doc-name">{doc.title}</div>
-                  <div className="doc-meta">
-                    {doc.type} · {doc.size} · {doc.date}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <div
-              className="card"
-              style={{ background: "var(--subtle)", border: "none", padding: 14, marginTop: 0 }}
-            >
-              <div className="doc-name">{selected.title}</div>
-              <div className="doc-meta">
-                {selected.group} / {selected.category} · {selected.type}
-              </div>
-              <p className="list-card-detail">{selected.summary}</p>
-              <div className="row" style={{ marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => onNotice("全文阅读将在功能实现阶段接入。")}
-                >
-                  打开文档
-                </button>
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  onClick={() => onNotice("加入知识库将在功能实现阶段接入。")}
-                >
-                  加入知识库
-                </button>
-              </div>
-            </div>
+          <div className="card" style={{ padding: 14 }}>
+            {selected ? (
+              <>
+                <div className="doc-name">{selected.name}</div>
+                <div className="doc-meta" style={{ marginTop: 8 }}>
+                  <div>大类：{selected.group}</div>
+                  <div>类型：{selected.type}</div>
+                  <div>大小：{selected.sizeText}</div>
+                  <div>修改时间：{selected.modTime}</div>
+                  <div style={{ wordBreak: "break-all" }}>路径：{selected.relPath}</div>
+                </div>
+                <div className="row" style={{ marginTop: 12, gap: 8 }}>
+                  <button type="button" className="primary-btn" onClick={() => void handleOpenFile(selected)}>
+                    打开文件
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => onNotice("加入知识库需要向量索引服务，尚未接入。")}
+                  >
+                    加入知识库
+                  </button>
+                </div>
+                <p className="caption" style={{ marginTop: 8 }}>
+                  索引功能未接入，当前只做文件浏览与打开。
+                </p>
+              </>
+            ) : (
+              <p className="caption">左侧选择一份资料查看详情。</p>
+            )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
-
-const docFallback: DocItem = {
-  id: "none",
-  title: "未选择资料",
-  group: "-",
-  category: "-",
-  type: "-",
-  size: "-",
-  date: "-",
-  summary: "请选择左侧资料查看详情。"
-};
