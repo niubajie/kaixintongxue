@@ -618,3 +618,74 @@ export async function removeKnowledgeBaseBatch(paths: string[]): Promise<number>
   }
   return payload?.count ?? 0;
 }
+
+
+// ---------- 服务端配置与更新检查 ----------
+
+export interface ServerConfigState {
+  url: string;
+  saved: boolean;
+  message: string;
+}
+
+export interface ServerTestResult {
+  ok: boolean;
+  status: number;
+  message: string;
+  body: string;
+}
+
+export interface UpdateNote {
+  version: string;
+  date: string;
+  note: string;
+}
+
+export interface UpdateCheckResult {
+  configured: boolean;
+  ok: boolean;
+  message: string;
+  notes: UpdateNote[];
+}
+
+export async function fetchServerConfig(): Promise<ServerConfigState> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/server/config`);
+  if (!response.ok) {
+    throw new Error(`读取服务器配置失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as ServerConfigState;
+}
+
+export async function saveServerConfig(url: string): Promise<ServerConfigState> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/server/config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
+  const payload = (await response.json().catch(() => null)) as (ServerConfigState & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `保存失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function testServer(): Promise<ServerTestResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/server/test`, { method: "POST" });
+  const payload = (await response.json().catch(() => null)) as (ServerTestResult & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `测试失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function checkUpdates(): Promise<UpdateCheckResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/update/check`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`检查更新失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as UpdateCheckResult;
+}

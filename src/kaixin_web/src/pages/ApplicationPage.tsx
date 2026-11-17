@@ -11,6 +11,46 @@ import {
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { TextWithVoice } from "../components/TextWithVoice";
 
+
+// 数据看板用的纯函数：全部按当前应用的真实数据算，不做任何写死。
+function parseMaterialSize(text: string): number {
+  const match = /([\d.]+)\s*(KB|MB|GB|B)/i.exec(text ?? "");
+  if (!match) {
+    return 0;
+  }
+  const value = Number(match[1]);
+  const unit = match[2].toUpperCase();
+  const factor = unit === "GB" ? 1024 ** 3 : unit === "MB" ? 1024 ** 2 : unit === "KB" ? 1024 : 1;
+  return Math.round(value * factor);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${bytes} B`;
+}
+
+function materialExt(name: string): string {
+  const index = name.lastIndexOf(".");
+  return index > 0 ? name.slice(index + 1).toUpperCase() : "其他";
+}
+
+function dayKey(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 interface Props {
   onNotice: (message: string) => void;
 }
@@ -138,6 +178,55 @@ export function ApplicationPage({ onNotice }: Props) {
     onNotice("已删除。");
   };
 
+  const dashboard = (() => {
+    const diaries = selected?.diaries ?? [];
+    const materials = selected?.materials ?? [];
+    const totalBytes = materials.reduce((sum, item) => sum + parseMaterialSize(item.size), 0);
+
+    const sorted = [...diaries].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    const lastUpdated = sorted.length > 0 ? dayKey(sorted[0].createdAt) || "—" : "暂无笔记";
+
+    const days: { key: string; label: string; count: number; height: number }[] = [];
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const date = new Date();
+      date.setDate(date.getDate() - offset);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const key = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+      days.push({ key, label: `${date.getMonth() + 1}/${date.getDate()}`, count: 0, height: 4 });
+    }
+    for (const entry of diaries) {
+      const key = dayKey(entry.createdAt);
+      const hit = days.find((day) => day.key === key);
+      if (hit) {
+        hit.count += 1;
+      }
+    }
+    const maxCount = Math.max(1, ...days.map((day) => day.count));
+    for (const day of days) {
+      day.height = day.count === 0 ? 4 : Math.round((day.count / maxCount) * 60) + 8;
+    }
+
+    const byExt = new Map<string, { count: number; bytes: number }>();
+    for (const item of materials) {
+      const ext = materialExt(item.name);
+      const current = byExt.get(ext) ?? { count: 0, bytes: 0 };
+      current.count += 1;
+      current.bytes += parseMaterialSize(item.size);
+      byExt.set(ext, current);
+    }
+    const maxBytes = Math.max(1, ...[...byExt.values()].map((item) => item.bytes));
+    const types = [...byExt.entries()]
+      .map(([ext, value]) => ({
+        ext,
+        count: value.count,
+        sizeText: formatBytes(value.bytes),
+        percent: Math.max(4, Math.round((value.bytes / maxBytes) * 100))
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { totalBytes, lastUpdated, week: days, types };
+  })();
+
   return (
     <div className="page">
       <div className="page-head">
@@ -189,6 +278,82 @@ export function ApplicationPage({ onNotice }: Props) {
                     <span className="tag">笔记 {selected.diaries.length}</span>
                     <span className="tag">资料 {selected.materials.length}</span>
                   </div>
+                </div>
+              </div>
+
+
+              {/* 数据看板：按当前应用的真实笔记与资料计算 */}
+              <div className="card" style={{ marginTop: 12 }}>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <h3 className="section-title">数据看板</h3>
+                  <span className="caption">按当前应用实时统计</span>
+                </div>
+
+                <div className="stats" style={{ marginTop: 10 }}>
+                  <div className="card">
+                    <div className="caption">笔记数</div>
+                    <div className="stat-value">{selected.diaries.length}</div>
+                  </div>
+                  <div className="card">
+                    <div className="caption">资料数</div>
+                    <div className="stat-value">{selected.materials.length}</div>
+                  </div>
+                  <div className="card">
+                    <div className="caption">资料占用</div>
+                    <div className="stat-value" style={{ fontSize: 18 }}>{formatBytes(dashboard.totalBytes)}</div>
+                  </div>
+                  <div className="card">
+                    <div className="caption">最近更新</div>
+                    <div className="stat-value" style={{ fontSize: 14 }}>{dashboard.lastUpdated}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <div className="caption">最近 7 天笔记数</div>
+                  <div className="row" style={{ alignItems: "flex-end", gap: 8, marginTop: 8, height: 72 }}>
+                    {dashboard.week.map((day) => (
+                      <div key={day.key} style={{ flex: 1, textAlign: "center" }}>
+                        <div
+                          title={`${day.key}：${day.count} 篇`}
+                          style={{
+                            height: `${Math.max(4, day.height)}px`,
+                            background: "var(--accent)",
+                            opacity: day.count > 0 ? 0.85 : 0.2,
+                            borderRadius: 4
+                          }}
+                        />
+                        <div className="caption" style={{ fontSize: 10, marginTop: 4 }}>{day.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <div className="caption">资料类型分布</div>
+                  {dashboard.types.length === 0 ? (
+                    <p className="caption" style={{ marginTop: 6 }}>还没有资料，去「资料库」上传后这里会有统计。</p>
+                  ) : (
+                    <div style={{ marginTop: 8 }}>
+                      {dashboard.types.map((item) => (
+                        <div key={item.ext} className="row" style={{ gap: 8, marginTop: 6 }}>
+                          <span className="tag" style={{ minWidth: 56, textAlign: "center" }}>{item.ext}</span>
+                          <div style={{ flex: 1, height: 8, background: "var(--line)", borderRadius: 4 }}>
+                            <div
+                              style={{
+                                width: `${item.percent}%`,
+                                height: "100%",
+                                background: "var(--accent)",
+                                borderRadius: 4
+                              }}
+                            />
+                          </div>
+                          <span className="caption" style={{ minWidth: 72, textAlign: "right" }}>
+                            {item.count} 份 · {item.sizeText}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { fetchAutostart, setAutostart } from "../deployApi";
+import {
+  fetchAutostart,
+  fetchServerConfig,
+  saveServerConfig,
+  setAutostart,
+  testServer
+} from "../deployApi";
 import { bridge } from "../platform";
 import { PERMISSIONS } from "../data";
 
@@ -17,6 +23,53 @@ export function SystemPage({ onNotice }: Props) {
   const [speech, setSpeech] = useState(true);
   const [startup, setStartup] = useState(false);
   const [autostartBusy, setAutostartBusy] = useState(false);
+  const [serverURL, setServerURL] = useState("");
+  const [serverSaved, setServerSaved] = useState(false);
+  const [serverBusy, setServerBusy] = useState(false);
+  const [serverResult, setServerResult] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetchServerConfig()
+      .then((state) => {
+        if (alive) {
+          setServerURL(state.url);
+          setServerSaved(state.saved);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const saveServer = async () => {
+    setServerBusy(true);
+    try {
+      const state = await saveServerConfig(serverURL);
+      setServerSaved(state.saved);
+      setServerResult(state.message);
+      onNotice(state.message);
+    } catch (err: unknown) {
+      setServerResult(err instanceof Error ? err.message : "保存失败");
+      onNotice(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      setServerBusy(false);
+    }
+  };
+
+  const checkServer = async () => {
+    setServerBusy(true);
+    try {
+      const result = await testServer();
+      setServerResult(`${result.message}${result.body ? "：" + result.body : ""}`);
+      onNotice(result.message);
+    } catch (err: unknown) {
+      setServerResult(err instanceof Error ? err.message : "测试失败");
+    } finally {
+      setServerBusy(false);
+    }
+  };
 
   // 真实读取注册表状态，而不是凭默认值
   useEffect(() => {
@@ -85,14 +138,16 @@ export function SystemPage({ onNotice }: Props) {
             <button
               type="button"
               className="secondary-btn"
-              onClick={() => onNotice("微信与手机号换绑将在接入服务端后开放。")}
+              disabled
+                title="换绑依赖服务端账号体系，尚未接入"
             >
               绑定微信 / 手机号
             </button>
             <button
               type="button"
               className="ghost-btn"
-              onClick={() => onNotice("邀请成员将在功能实现阶段接入。")}
+              disabled
+              title="成员管理依赖服务端账号体系，尚未接入"
             >
               邀请成员
             </button>
@@ -160,17 +215,35 @@ export function SystemPage({ onNotice }: Props) {
 
         <div className="card">
           <h2 className="section-title">服务器</h2>
-          <p className="list-card-detail">当前未配置服务器地址，使用内置技能清单与本地演示数据。</p>
-          <div className="row" style={{ marginTop: 12 }}>
+          <p className="list-card-detail">
+            {serverSaved
+              ? "已配置服务器：目录下发、账号与更新检查都依赖它。"
+              : "未配置服务器：使用内置目录与本地数据，功能不受影响。"}
+          </p>
+          <div className="row" style={{ marginTop: 12, gap: 8, flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 240 }}
+              placeholder="例如 http://127.0.0.1:8080"
+              value={serverURL}
+              onChange={(event) => setServerURL(event.target.value)}
+            />
+            <button type="button" className="primary-btn" onClick={() => void saveServer()} disabled={serverBusy}>
+              保存
+            </button>
             <button
               type="button"
               className="secondary-btn"
-              onClick={() => onNotice("服务器地址配置将在接入服务端后开放。")}
+              onClick={() => void checkServer()}
+              disabled={serverBusy || !serverSaved}
             >
-              配置服务器
+              测试连接
             </button>
-            <span className="tag">离线可用</span>
+            <span className={`tag${serverSaved ? " accent" : ""}`}>{serverSaved ? "已配置" : "纯本地"}</span>
           </div>
+          {serverResult && (
+            <p className="caption" style={{ marginTop: 8 }}>{serverResult}</p>
+          )}
         </div>
       </div>
     </div>

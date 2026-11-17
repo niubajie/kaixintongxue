@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { bridge } from "../platform";
+import { checkUpdates, type UpdateCheckResult } from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
 }
-
-type CheckState = "idle" | "checking" | "unavailable";
 
 const HISTORY_NOTES: { version: string; date: string; note: string }[] = [
   { version: "0.5.0", date: "11-15", note: "新增历史任务入口，精简导航与对话框" },
@@ -15,7 +14,8 @@ const HISTORY_NOTES: { version: string; date: string; note: string }[] = [
 
 export function UpdatePage({ onNotice }: Props) {
   const [version, setVersion] = useState("");
-  const [state, setState] = useState<CheckState>("idle");
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [checkedAt, setCheckedAt] = useState("");
 
   useEffect(() => {
@@ -30,20 +30,29 @@ export function UpdatePage({ onNotice }: Props) {
     };
   }, []);
 
-  // 当前没有配置更新服务：如实告知「无法检查」，不编造新版本号。
-  const check = () => {
-    setState("checking");
-    window.setTimeout(() => {
-      setState("unavailable");
+  const check = async () => {
+    setChecking(true);
+    try {
+      const res = await checkUpdates();
+      setResult(res);
+      onNotice(res.message);
+    } catch (err: unknown) {
+      setResult({
+        configured: false,
+        ok: false,
+        message: err instanceof Error ? err.message : "检查更新失败",
+        notes: []
+      });
+    } finally {
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, "0");
       setCheckedAt(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
-      onNotice("未配置更新服务，暂时无法检查新版本。");
-    }, 700);
+      setChecking(false);
+    }
   };
 
-  const badge =
-    state === "checking" ? "检查中…" : state === "unavailable" ? "无法检查" : "未检查";
+  const badge = checking ? "检查中…" : result ? (result.ok ? "已获取" : "无法检查") : "未检查";
+  const badgeClass = !result || result.ok ? "tag accent" : "tag";
 
   return (
     <div className="page">
@@ -59,29 +68,53 @@ export function UpdatePage({ onNotice }: Props) {
                 当前版本 {version || "读取中…"} · 桌面端
               </div>
             </div>
-            <span className={`tag${state === "unavailable" ? "" : " accent"}`}>{badge}</span>
+            <span className={badgeClass}>{badge}</span>
           </div>
 
           <div className="row" style={{ marginTop: 16 }}>
-            <button type="button" className="primary-btn" onClick={check} disabled={state === "checking"}>
-              {state === "checking" ? "检查中…" : "检查更新"}
+            <button type="button" className="primary-btn" onClick={() => void check()} disabled={checking}>
+              {checking ? "检查中…" : "检查更新"}
             </button>
             <span className="caption">
-              {state === "checking"
-                ? "正在连接更新服务…"
-                : checkedAt
-                  ? `上次检查：${checkedAt}`
-                  : "尚未检查"}
+              {checking ? "正在连接更新服务…" : checkedAt ? `上次检查：${checkedAt}` : "尚未检查"}
             </span>
           </div>
 
-          {state === "unavailable" && (
+          {result && (
             <div className="update-notes" style={{ marginTop: 14 }}>
-              尚未接入更新服务，因此无法判断是否有新版本。
+              {result.message}
+              {!result.configured && (
+                <>
+                  {"\n"}
+                  到「系统设置 → 服务器」填入服务端地址后再试。
+                </>
+              )}
               {"\n"}
-              接入云端后，这里会显示可用版本、更新说明与「立即更新」。
-              {"\n"}
-              当前不会自动下载或安装任何内容。
+              当前不会自动下载或安装任何内容；下载安装仍在开发中。
+            </div>
+          )}
+
+          {result && result.notes.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="caption">服务端版本说明</div>
+              <table className="table" style={{ marginTop: 6 }}>
+                <thead>
+                  <tr>
+                    <th>版本</th>
+                    <th>日期</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.notes.map((item) => (
+                    <tr key={item.version + item.date}>
+                      <td>{item.version}</td>
+                      <td>{item.date}</td>
+                      <td>{item.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
