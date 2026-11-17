@@ -12,13 +12,23 @@ export interface MaterialItem {
   name: string;
   size: string;
   uploadedAt: string;
+  /** 新上传/新提炼的资料为待确认，确认后才算正式资料 */
+  pending?: boolean;
+  /** 关键词区：便于检索，自动从文件名提取，可手工增删 */
+  keywords?: string[];
 }
+
+/** 应用类型：决定数据窗展示哪些指标 */
+export type AppKind = "repair" | "douyin" | "generic";
 
 export interface AppModule {
   id: string;
   title: string;
+  kind?: AppKind;
   diaries: DiaryEntry[];
   materials: MaterialItem[];
+  /** 子应用：内容与主应用完全一致（笔记 + 资料库） */
+  children?: AppModule[];
 }
 
 export interface PlanStep {
