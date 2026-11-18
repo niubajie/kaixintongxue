@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,8 +38,10 @@ var (
 	cpuTempNote     = "尚未读取"
 )
 
-// readCPUTemp 通过 WMI 读 ACPI 温度区。结果缓存 60 秒，失败也缓存，
-// 避免每 15 秒拉一次 PowerShell。
+// readCPUTemp 按可靠度依次尝试：
+//  1. LibreHardwareMonitor / OpenHardwareMonitor 的 WMI 命名空间（有真实传感器时最准）
+//  2. ACPI 热区（很多台式机主板这块没接传感器，会给固定值）
+// 都拿不到可信值时返回 nil 与原因，界面显示「—」，不编数字。
 func readCPUTemp() (*float64, string) {
 	statusMu.Lock()
 	defer statusMu.Unlock()
@@ -48,43 +49,94 @@ func readCPUTemp() (*float64, string) {
 	if time.Since(cpuTempCachedAt) < 60*time.Second && cpuTempCachedAt != (time.Time{}) {
 		return cpuTempCached, cpuTempNote
 	}
-
 	cpuTempCachedAt = time.Now()
 	cpuTempCached = nil
-	cpuTempNote = "本机未提供温度传感器数据（台式机常见）"
 
+	if temp, ok := readTempFromHardwareMonitor(); ok {
+		cpuTempCached = &temp
+		cpuTempNote = "来自硬件监控（LibreHardwareMonitor）"
+		return cpuTempCached, cpuTempNote
+	}
+
+	temp, note := readTempFromACPI()
+	cpuTempCached = temp
+	cpuTempNote = note
+	return cpuTempCached, cpuTempNote
+}
+
+// readTempFromHardwareMonitor 读 LibreHardwareMonitor / OpenHardwareMonitor 的传感器。
+// 没装这类工具时直接跳过，不报错。
+func readTempFromHardwareMonitor() (float64, bool) {
+	script := `
+$found = $null
+foreach ($ns in @("root/LibreHardwareMonitor", "root/OpenHardwareMonitor")) {
+  try {
+    $sensors = Get-CimInstance -Namespace $ns -ClassName Sensor -ErrorAction Stop |
+      Where-Object { $_.SensorType -eq "Temperature" -and $_.Name -match "CPU|Package|Core" }
+    if ($sensors) {
+      $found = ($sensors | Measure-Object -Property Value -Maximum).Maximum
+      break
+    }
+  } catch { }
+}
+if ($found) { "{0:N1}" -f $found }
+`
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
-		"(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop).CurrentTemperature")
+	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script)
 	output, err := cmd.Output()
 	if err != nil {
-		cpuTempNote = "读取温度失败：需要管理员权限或本机不支持 ACPI 温度"
-		return nil, cpuTempNote
+		return 0, false
+	}
+	value, parseErr := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
+	if parseErr != nil || value < 20 || value > 110 {
+		return 0, false
+	}
+	return value, true
+}
+
+// readTempFromACPI 读 ACPI 热区，并用「临界温度」交叉验证。
+// 有些主板不接传感器，会同时给出一个不可能的低临界温度——这种情况整块数据判为无效。
+func readTempFromACPI() (*float64, string) {
+	script := `
+$z = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue
+if (-not $z) { return }
+$z | ForEach-Object { "{0} {1}" -f $_.CurrentTemperature, $_.CriticalTripPoint }
+`
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	output, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(output)) == "" {
+		return nil, "本机没有可用的温度传感器（未安装硬件监控工具）"
 	}
 
-	// 输出可能是多行（多个热区），取第一行
-	text := strings.TrimSpace(string(output))
-	if idx := strings.IndexAny(text, "\r\n"); idx >= 0 {
-		text = strings.TrimSpace(text[:idx])
+	best := -1.0
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+		current, err1 := strconv.ParseFloat(fields[0], 64)
+		critical, err2 := strconv.ParseFloat(fields[1], 64)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		celsius := current/10 - 273.15
+		criticalC := critical/10 - 273.15
+		// 临界温度低于 60°C 说明这个热区没有接真实传感器，整条丢弃
+		if criticalC < 60 {
+			continue
+		}
+		if celsius >= 20 && celsius <= 110 && celsius > best {
+			best = celsius
+		}
 	}
-	raw, parseErr := strconv.ParseFloat(regexp.MustCompile(`-?\d+(\.\d+)?`).FindString(text), 64)
-	if parseErr != nil || raw <= 0 {
-		cpuTempNote = "温度数据格式无法识别"
-		return nil, cpuTempNote
+
+	if best < 0 {
+		return nil, "本机 ACPI 热区未接真实传感器（临界温度不合理），读数已丢弃"
 	}
-	// ACPI 返回的是开尔文的十分之一
-	celsius := raw/10 - 273.15
-	// 台式机主板的 ACPI 热区经常给出无意义读数（例如开机就 17°C）。
-	// 低于 20°C 或高于 110°C 一律视为不可信，宁可不显示也不误导。
-	if celsius < 20 || celsius > 110 {
-		cpuTempNote = "本机温度读数不可信（ACPI 热区异常），已忽略"
-		return nil, cpuTempNote
-	}
-	cpuTempCached = &celsius
-	cpuTempNote = "来自 ACPI 热区"
-	return cpuTempCached, cpuTempNote
+	return &best, "来自 ACPI 热区"
 }
 
 // checkOnline 用 TCP 连接常见公网地址，2 秒内连上即视为在线。

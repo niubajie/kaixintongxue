@@ -58,8 +58,15 @@ export function ComputerStatusBar() {
 
   return (
     <span className="computer-status">
-      <span className="computer-status-item" title={`CPU 温度：${status.cpuTempNote}`}>
-        温度 {tempText}
+      <span
+        className="computer-status-item"
+        title={
+          status.cpuTempC === null
+            ? `CPU 温度：${status.cpuTempNote}。安装 LibreHardwareMonitor 后本应用会自动读取真实温度。`
+            : `CPU 温度：${status.cpuTempNote}`
+        }
+      >
+        CPU 温度 {tempText}
       </span>
       <span
         className="computer-status-item"
