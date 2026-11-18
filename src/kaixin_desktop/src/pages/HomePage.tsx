@@ -1,13 +1,57 @@
 import { useEffect, useRef, useState } from "react";
 import { ModelSelector } from "../components/ModelSelector";
-import { AI_MODELS, RECENT_QUESTIONS, type AiModelOption } from "../data";
+import { AI_MODELS, type AiModelOption } from "../data";
 import { bridge } from "../platform";
-import { usePersistentState } from "../assistant";
 import { fetchASRStatus, transcribeAudio } from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
-  onNavigateSkills: () => void;
+  onNavigateApps: () => void;
+}
+
+
+// 首页底部「最新待确认资料」：从应用助手里读待确认的资料（含子应用）。
+// 数据源与「应用助手」同一个存储键，避免两处各存一份。
+interface PendingMaterial {
+  key: string;
+  name: string;
+  appTitle: string;
+}
+
+function collectPendingMaterials(): PendingMaterial[] {
+  try {
+    const raw = localStorage.getItem("kaixin.apps.v1");
+    if (!raw) {
+      return [];
+    }
+    const apps = JSON.parse(raw) as {
+      id: string;
+      title: string;
+      materials?: { id: string; name: string; pending?: boolean; uploadedAt?: string }[];
+      children?: { id: string; title: string; materials?: { id: string; name: string; pending?: boolean }[] }[];
+    }[];
+    const out: { item: PendingMaterial; uploadedAt: string }[] = [];
+    const push = (appTitle: string, materials?: { id: string; name: string; pending?: boolean; uploadedAt?: string }[]) => {
+      for (const material of materials ?? []) {
+        if (material.pending) {
+          out.push({
+            item: { key: `${appTitle}-${material.id}`, name: material.name, appTitle },
+            uploadedAt: material.uploadedAt ?? ""
+          });
+        }
+      }
+    };
+    for (const app of apps) {
+      push(app.title, app.materials);
+      for (const child of app.children ?? []) {
+        push(child.title, child.materials);
+      }
+    }
+    out.sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1));
+    return out.slice(0, 6).map((entry) => entry.item);
+  } catch {
+    return [];
+  }
 }
 
 function baseName(path: string): string {
@@ -15,21 +59,20 @@ function baseName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-export function HomePage({ onNotice, onNavigateSkills }: Props) {
+export function HomePage({ onNotice, onNavigateApps }: Props) {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<AiModelOption>(AI_MODELS[0]);
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelWidth, setPanelWidth] = useState(680);
 
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [pendingMaterials, setPendingMaterials] = useState<PendingMaterial[]>([]);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [wave, setWave] = useState<number[]>([]);
   const [voiceHint, setVoiceHint] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const [asrReady, setAsrReady] = useState<boolean | null>(null);
-  // 私域策略：开启后拒绝把内容交给云端模型
-  const [localOnly, setLocalOnly] = usePersistentState<boolean>("kaixin.privacy.localOnly", false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -39,6 +82,10 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
   const chunksRef = useRef<Blob[]>([]);
 
   // 启动时探测本地转写是否就绪（二进制 + 模型 + ffmpeg）
+  useEffect(() => {
+    setPendingMaterials(collectPendingMaterials());
+  }, []);
+
   useEffect(() => {
     let alive = true;
     fetchASRStatus()
@@ -201,12 +248,6 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
       onNotice("请先输入内容，再发送。");
       return;
     }
-    if (localOnly && !model.local) {
-      onNotice(
-        `已开启「仅本地模型」：${model.name} 是云端模型，内容会被上传。请切换到本地模型后再发送。`
-      );
-      return;
-    }
     if (attachments.length > 0) {
       onNotice(
         `已提交：${input.trim().slice(0, 20) || "（无文字）"}，附带 ${attachments.length} 个附件。模型调用尚未接入。`
@@ -285,23 +326,6 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
             <button type="button" className="icon-btn" title="添加附件" onClick={() => void pickAttachments()}>
               <span style={{ fontSize: 19, fontWeight: 300 }}>+</span>
             </button>
-            <button
-              type="button"
-              className={`segment${localOnly ? " active" : ""}`}
-              title={localOnly ? "仅本地模型：内容不出本机" : "当前允许云端模型"}
-              onClick={() => {
-                const next = !localOnly;
-                setLocalOnly(next);
-                onNotice(
-                  next
-                    ? "已开启「仅本地模型」：发送前会检查所选模型，云端模型会被拒绝。"
-                    : "已关闭「仅本地模型」：内容可能被发送到云端模型。"
-                );
-              }}
-              style={{ marginLeft: 6 }}
-            >
-              {localOnly ? "仅本地" : "允许云端"}
-            </button>
             <div className="panel-tools-right">
               <ModelSelector
                 value={model}
@@ -365,26 +389,27 @@ export function HomePage({ onNotice, onNavigateSkills }: Props) {
         </div>
 
         <p className="caption" style={{ marginTop: 18 }}>
-          最近提问（点一下填入输入框；带「技能」的直接跳到技能部署）
+          最新待确认资料{pendingMaterials.length > 0 ? `（${pendingMaterials.length} 份）` : ""}
         </p>
-        <div className="row" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
-          {RECENT_QUESTIONS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                if (item.includes("技能")) {
-                  onNavigateSkills();
-                  return;
-                }
-                setInput(item);
-              }}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
+        {pendingMaterials.length === 0 ? (
+          <p className="caption" style={{ marginTop: 6 }}>
+            暂无待确认资料。在「应用助手」上传或从笔记提炼资料后会出现在这里。
+          </p>
+        ) : (
+          <div className="row" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+            {pendingMaterials.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className="ghost-btn"
+                title={`${item.appTitle} · ${item.name}`}
+                onClick={() => onNavigateApps()}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

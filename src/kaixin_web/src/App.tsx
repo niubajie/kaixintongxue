@@ -75,9 +75,9 @@ export default function App() {
         return (
           <HomePage
             onNotice={notify}
-            onNavigateSkills={() => {
-              setPage("skills");
-              notify("已打开技能部署，可选择技能生成方案。");
+            onNavigateApps={() => {
+              setPage("application");
+              notify("已打开应用助手，可确认或删除待确认资料。");
             }}
           />
         );
