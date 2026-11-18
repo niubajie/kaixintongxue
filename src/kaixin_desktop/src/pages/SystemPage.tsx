@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import {
+  fetchAccount,
   fetchAutostart,
   fetchServerConfig,
   saveServerConfig,
   setAutostart,
-  testServer
+  signIn,
+  signOut,
+  testServer,
+  type AccountState
 } from "../deployApi";
 import { bridge } from "../platform";
 import { isVoiceEnabled, setVoiceEnabled, speak, voiceSupported } from "../voice";
@@ -14,11 +18,11 @@ interface Props {
   onNotice: (message: string) => void;
 }
 
-const MEMBERS = [
-  { name: "开心同学", account: "kaixin", phone: "138****8866", wechat: "已绑定", role: "管理员" },
-  { name: "小林", account: "xiaolin", phone: "139****2210", wechat: "已绑定", role: "成员" },
-  { name: "访客账号", account: "guest", phone: "未绑定", wechat: "未绑定", role: "访客" }
-];
+const ROLE_LABEL: Record<string, string> = {
+  Owner: "拥有者",
+  Admin: "管理员",
+  Member: "成员"
+};
 
 export function SystemPage({ onNotice }: Props) {
   const [speech, setSpeech] = useState(() => isVoiceEnabled());
@@ -28,6 +32,56 @@ export function SystemPage({ onNotice }: Props) {
   const [serverSaved, setServerSaved] = useState(false);
   const [serverBusy, setServerBusy] = useState(false);
   const [serverResult, setServerResult] = useState("");
+  const [account, setAccount] = useState<AccountState | null>(null);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [loginAccount, setLoginAccount] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginName, setLoginName] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetchAccount()
+      .then((state) => {
+        if (alive) {
+          setAccount(state);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const doSignIn = async (register: boolean) => {
+    if (!loginAccount.trim() || !loginPassword) {
+      onNotice("请填写账号与密码。");
+      return;
+    }
+    setAccountBusy(true);
+    try {
+      const state = await signIn(loginAccount.trim(), loginPassword, register, loginName.trim());
+      setAccount(state);
+      setLoginPassword("");
+      onNotice(register ? "注册并登录成功。" : "登录成功。");
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "登录失败");
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const doSignOut = async () => {
+    setAccountBusy(true);
+    try {
+      await signOut();
+      setAccount({ loggedIn: false, id: 0, account: "", displayName: "", role: "", message: "已退出登录" });
+      onNotice("已退出登录。");
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "退出失败");
+    } finally {
+      setAccountBusy(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -112,44 +166,75 @@ export function SystemPage({ onNotice }: Props) {
         <p className="page-subtitle">账号、权限、安装模式与本地运行参数</p>
 
         <div className="card" style={{ marginTop: 18 }}>
-          <h2 className="section-title">账号与权限</h2>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>成员</th>
-                <th>账号</th>
-                <th>手机号</th>
-                <th>微信</th>
-                <th>角色</th>
-              </tr>
-            </thead>
-            <tbody>
-              {MEMBERS.map((member) => (
-                <tr key={member.account}>
-                  <td>{member.name}</td>
-                  <td>{member.account}</td>
-                  <td>{member.phone}</td>
-                  <td>{member.wechat}</td>
-                  <td>{member.role}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 className="section-title">账号</h2>
+            <span className={`tag${account?.loggedIn ? " accent" : ""}`}>
+              {account?.loggedIn ? "已登录" : "未登录"}
+            </span>
+          </div>
+
+          {account?.loggedIn ? (
+            <>
+              <div className="row" style={{ gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                <span className="tag">名称 {account.displayName || account.account}</span>
+                <span className="tag">账号 {account.account}</span>
+                <span className="tag">角色 {ROLE_LABEL[account.role] ?? account.role}</span>
+              </div>
+              <p className="caption" style={{ marginTop: 8 }}>
+                会话由本地服务保管，页面不持有登录凭据；退出后需重新登录才能使用云端功能。
+              </p>
+              <div className="row" style={{ marginTop: 12 }}>
+                <button type="button" className="secondary-btn" onClick={() => void doSignOut()} disabled={accountBusy}>
+                  {accountBusy ? "处理中…" : "退出登录"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="caption" style={{ marginTop: 6 }}>
+                登录后可同步目录、查看成员与权限。未登录不影响本地功能。
+              </p>
+              <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <input
+                  className="input"
+                  style={{ flex: 1, minWidth: 160 }}
+                  placeholder="账号"
+                  value={loginAccount}
+                  onChange={(event) => setLoginAccount(event.target.value)}
+                />
+                <input
+                  className="input"
+                  style={{ flex: 1, minWidth: 160 }}
+                  type="password"
+                  placeholder="密码（至少 6 位）"
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                />
+                <input
+                  className="input"
+                  style={{ flex: 1, minWidth: 140 }}
+                  placeholder="显示名称（注册时用）"
+                  value={loginName}
+                  onChange={(event) => setLoginName(event.target.value)}
+                />
+              </div>
+              <div className="row" style={{ gap: 8, marginTop: 10 }}>
+                <button type="button" className="primary-btn" onClick={() => void doSignIn(false)} disabled={accountBusy}>
+                  {accountBusy ? "处理中…" : "登录"}
+                </button>
+                <button type="button" className="secondary-btn" onClick={() => void doSignIn(true)} disabled={accountBusy}>
+                  注册并登录
+                </button>
+                {account?.message && <span className="caption">{account.message}</span>}
+              </div>
+            </>
+          )}
+
           <div className="row" style={{ marginTop: 14 }}>
-            <button
-              type="button"
-              className="secondary-btn"
-              disabled
-                title="换绑依赖服务端账号体系，尚未接入"
-            >
+            <button type="button" className="secondary-btn" disabled title="换绑需要服务端下发验证码，尚未接入">
               绑定微信 / 手机号
             </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled
-              title="成员管理依赖服务端账号体系，尚未接入"
-            >
+            <button type="button" className="ghost-btn" disabled title="成员邀请需要服务端管理员权限与邮件/短信通道，尚未接入">
               邀请成员
             </button>
           </div>

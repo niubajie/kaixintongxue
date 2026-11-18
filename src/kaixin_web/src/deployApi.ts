@@ -736,3 +736,48 @@ export async function rollbackKnowledgeBase(path: string, revision: number): Pro
   }
   return payload;
 }
+
+
+// ---------- 账号（经 sidecar 代理，页面不持有 Token） ----------
+
+export interface AccountState {
+  loggedIn: boolean;
+  id: number;
+  account: string;
+  displayName: string;
+  role: string;
+  message: string;
+}
+
+export async function fetchAccount(): Promise<AccountState> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/account/me`);
+  if (!response.ok) {
+    throw new Error(`读取账号失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as AccountState;
+}
+
+export async function signIn(
+  account: string,
+  password: string,
+  register = false,
+  displayName = ""
+): Promise<AccountState> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/account/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account, password, register, displayName })
+  });
+  const payload = (await response.json().catch(() => null)) as (AccountState & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `${register ? "注册" : "登录"}失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function signOut(): Promise<void> {
+  const base = BASE;
+  await fetch(`${base}/api/account/logout`, { method: "POST" });
+}
