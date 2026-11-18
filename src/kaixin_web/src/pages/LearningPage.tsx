@@ -10,6 +10,7 @@ import {
   type LearningModule
 } from "../assistant";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { generatePlanByModel, generateQuestionsByModel } from "../deployApi";
 import { TextWithVoice } from "../components/TextWithVoice";
 
 interface Props {
@@ -118,6 +119,7 @@ export function LearningPage({ onNotice }: Props) {
 
   // FR-LRN-02：生成方案后提问自动缩成一行
   const [questionsOpen, setQuestionsOpen] = useState(false);
+  const [generating, setGenerating] = useState<"" | "questions" | "plan">("");
   const [scheduleText, setScheduleText] = useState("");
 
   const [confirmModule, setConfirmModule] = useState<LearningModule | null>(null);
@@ -189,21 +191,49 @@ export function LearningPage({ onNotice }: Props) {
     setFormOpen(false);
   };
 
-  const generateQuestions = () => {
+  const generateQuestions = async () => {
     if (!selected) {
       return;
     }
-    updateSelected((item) => ({ ...item, questions: generateLearningQuestions(item.title) }));
-    onNotice("已生成 5 个用于明确学习目标的提问。");
+    const item = selected;
+    setGenerating("questions");
+    try {
+      const result = await generateQuestionsByModel(item.title, "learning");
+      updateSelected((current) => ({ ...current, questions: result.questions }));
+      onNotice(`已由 ${result.model} 生成 ${result.questions.length} 个提问（${(result.elapsedMs / 1000).toFixed(0)} 秒）。`);
+    } catch (err: unknown) {
+      updateSelected((current) => ({ ...current, questions: generateLearningQuestions(current.title) }));
+      onNotice(`${err instanceof Error ? err.message : "模型生成失败"}；已使用内置模板。`);
+    } finally {
+      setGenerating("");
+    }
   };
 
-  const generatePlan = () => {
+  const generatePlan = async () => {
     if (!selected) {
       return;
     }
-    updateSelected((item) => ({ ...item, stages: buildLearningPlan(item.title) }));
-    onNotice("已生成三阶段学习方案，完成度会换算成绩。");
+    const item = selected;
+    setGenerating("plan");
+    try {
+      const result = await generatePlanByModel(item.title, "learning");
+      updateSelected((current) => ({
+        ...current,
+        stages: result.stages.map((stage) => ({
+          id: createId("st"),
+          name: stage.name,
+          steps: stage.steps.map((text) => ({ id: createId("sp"), text, done: false }))
+        }))
+      }));
+      onNotice(`已由 ${result.model} 生成 ${result.stages.length} 个阶段（${(result.elapsedMs / 1000).toFixed(0)} 秒）。`);
+    } catch (err: unknown) {
+      updateSelected((current) => ({ ...current, stages: buildLearningPlan(current.title) }));
+      onNotice(`${err instanceof Error ? err.message : "模型生成失败"}；已使用内置模板。`);
+    } finally {
+      setGenerating("");
+    }
   };
+
 
   const toggleStep = (stageId: string, stepId: string) => {
     updateSelected((item) => ({
@@ -396,8 +426,17 @@ export function LearningPage({ onNotice }: Props) {
                     )}
                   </span>
                   <span className="row" style={{ gap: 6 }}>
-                    <button type="button" className="secondary-btn" onClick={generateQuestions}>
-                      {selected.questions.length > 0 ? "重新生成提问" : "生成提问"}
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => void generateQuestions()}
+                      disabled={generating !== ""}
+                    >
+                      {generating === "questions"
+                        ? "生成中…"
+                        : selected.questions.length > 0
+                          ? "重新生成提问"
+                          : "生成提问"}
                     </button>
                     {selected.questions.length > 0 && selected.stages.length > 0 && (
                       <button

@@ -9,6 +9,7 @@ import {
   type AssistantGoal
 } from "../assistant";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { generatePlanByModel, generateQuestionsByModel } from "../deployApi";
 import { TextWithVoice } from "../components/TextWithVoice";
 
 interface Props {
@@ -23,6 +24,7 @@ export function GoalPage({ onNotice }: Props) {
 
   // FR-GOAL-02：生成方案后提问自动缩成一行，点下三角再展开
   const [questionsOpen, setQuestionsOpen] = useState(false);
+  const [generating, setGenerating] = useState<"" | "questions" | "plan">("");
   const [stageEditing, setStageEditing] = useState<{ id: string; value: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -84,21 +86,50 @@ export function GoalPage({ onNotice }: Props) {
     setFormOpen(false);
   };
 
-  const generateQuestions = () => {
+  const generateQuestions = async () => {
     if (!selected) {
       return;
     }
-    updateSelected((goal) => ({ ...goal, questions: generateGoalQuestions(goal.title) }));
-    onNotice("已生成 5 个用于澄清目标的提问。");
+    const goal = selected;
+    setGenerating("questions");
+    try {
+      const result = await generateQuestionsByModel(goal.title, "goal");
+      updateSelected((item) => ({ ...item, questions: result.questions }));
+      onNotice(`已由 ${result.model} 生成 ${result.questions.length} 个提问（${(result.elapsedMs / 1000).toFixed(0)} 秒）。`);
+    } catch (err: unknown) {
+      // 模型不可用时退回内置模板，功能不瘫
+      updateSelected((item) => ({ ...item, questions: generateGoalQuestions(item.title) }));
+      onNotice(`${err instanceof Error ? err.message : "模型生成失败"}；已使用内置模板。`);
+    } finally {
+      setGenerating("");
+    }
   };
 
-  const generatePlan = () => {
+  const generatePlan = async () => {
     if (!selected) {
       return;
     }
-    updateSelected((goal) => ({ ...goal, stages: buildGoalPlan(goal.title) }));
-    onNotice("已按三阶段自动生成执行方案。");
+    const goal = selected;
+    setGenerating("plan");
+    try {
+      const result = await generatePlanByModel(goal.title, "goal");
+      updateSelected((item) => ({
+        ...item,
+        stages: result.stages.map((stage) => ({
+          id: createId("st"),
+          name: stage.name,
+          steps: stage.steps.map((text) => ({ id: createId("sp"), text, done: false }))
+        }))
+      }));
+      onNotice(`已由 ${result.model} 生成 ${result.stages.length} 个阶段（${(result.elapsedMs / 1000).toFixed(0)} 秒）。`);
+    } catch (err: unknown) {
+      updateSelected((item) => ({ ...item, stages: buildGoalPlan(item.title) }));
+      onNotice(`${err instanceof Error ? err.message : "模型生成失败"}；已使用内置模板。`);
+    } finally {
+      setGenerating("");
+    }
   };
+
 
   const toggleStep = (stageId: string, stepId: string) => {
     updateSelected((goal) => ({
@@ -250,8 +281,17 @@ export function GoalPage({ onNotice }: Props) {
                     )}
                   </span>
                   <span className="row" style={{ gap: 6 }}>
-                    <button type="button" className="secondary-btn" onClick={generateQuestions}>
-                      {selected.questions.length > 0 ? "重新生成提问" : "生成提问"}
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => void generateQuestions()}
+                      disabled={generating !== ""}
+                    >
+                      {generating === "questions"
+                        ? "生成中…（本机模型可能要一分钟）"
+                        : selected.questions.length > 0
+                          ? "重新生成提问"
+                          : "生成提问"}
                     </button>
                     {selected.questions.length > 0 && selected.stages.length > 0 && (
                       <button
@@ -284,8 +324,17 @@ export function GoalPage({ onNotice }: Props) {
               <div className="card" style={{ marginTop: 12 }}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   <h3 className="section-title">自动建方案</h3>
-                  <button type="button" className="secondary-btn" onClick={generatePlan}>
-                    {selected.stages.length > 0 ? "重新生成方案" : "自动建方案"}
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => void generatePlan()}
+                    disabled={generating !== ""}
+                  >
+                    {generating === "plan"
+                      ? "生成中…（本机模型可能要一分钟）"
+                      : selected.stages.length > 0
+                        ? "重新生成方案"
+                        : "自动建方案"}
                   </button>
                 </div>
 

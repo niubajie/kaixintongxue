@@ -125,6 +125,8 @@ func main() {
 	mux.HandleFunc("POST /api/model/test", app.handleModelTest)
 	mux.HandleFunc("POST /api/chat", app.handleChat)
 	mux.HandleFunc("POST /api/chat/stream", app.handleChatStream)
+	mux.HandleFunc("POST /api/generate/questions", app.handleGenerateQuestions)
+	mux.HandleFunc("POST /api/generate/plan", app.handleGeneratePlan)
 	mux.HandleFunc("GET /api/chat/usage", app.handleUsageList)
 	mux.HandleFunc("GET /api/system/autostart", app.handleAutostartGet)
 	mux.HandleFunc("POST /api/system/autostart", app.handleAutostartSet)

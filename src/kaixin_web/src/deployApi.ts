@@ -1049,3 +1049,52 @@ export async function streamChat(
     }
   }
 }
+
+
+// ---------- 模型生成提问与方案（失败时前端回退模板） ----------
+
+export async function generateQuestionsByModel(
+  topic: string,
+  kind: "goal" | "learning"
+): Promise<{ questions: string[]; model: string; elapsedMs: number }> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/generate/questions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, kind })
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { questions?: string[]; model?: string; elapsedMs?: number; message?: string }
+    | null;
+  if (!response.ok || !payload?.questions) {
+    throw new Error(payload?.message ?? `生成失败（HTTP ${response.status}）`);
+  }
+  return {
+    questions: payload.questions,
+    model: payload.model ?? "",
+    elapsedMs: payload.elapsedMs ?? 0
+  };
+}
+
+export async function generatePlanByModel(
+  topic: string,
+  kind: "goal" | "learning"
+): Promise<{ stages: { name: string; steps: string[] }[]; model: string; elapsedMs: number }> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/generate/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, kind })
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { stages?: { name: string; steps: string[] }[]; model?: string; elapsedMs?: number; message?: string }
+    | null;
+  if (!response.ok || !payload?.stages) {
+    throw new Error(payload?.message ?? `生成失败（HTTP ${response.status}）`);
+  }
+  return {
+    stages: payload.stages,
+    model: payload.model ?? "",
+    elapsedMs: payload.elapsedMs ?? 0
+  };
+}
