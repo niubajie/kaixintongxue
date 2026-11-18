@@ -444,14 +444,6 @@ func decodeStringArray(raw string) []string {
 
 // ---------- HTTP ----------
 
-func (a *App) handleDataInfo(w http.ResponseWriter, r *http.Request) {
-	if a.store == nil {
-		fail(w, http.StatusServiceUnavailable, "本地库未初始化")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"store": a.store.Stats(r.Context())})
-}
-
 func (a *App) handleListCustomSkills(w http.ResponseWriter, r *http.Request) {
 	if a.store == nil {
 		fail(w, http.StatusServiceUnavailable, "本地库未初始化")

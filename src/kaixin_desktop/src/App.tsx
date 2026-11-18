@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ComputerStatusBar } from "./components/ComputerStatusBar";
+import { ackDataLocation, fetchDataInfo, type DataLocation } from "./deployApi";
 import { HomePage } from "./pages/HomePage";
 import { ApplicationPage } from "./pages/ApplicationPage";
 import { GoalPage } from "./pages/GoalPage";
@@ -38,8 +39,24 @@ export default function App() {
   );
   const [version, setVersion] = useState("0.5.0");
   const [closeConfirm, setCloseConfirm] = useState(false);
+  const [dataNotice, setDataNotice] = useState<DataLocation | null>(null);
 
   // 版本号不再写死在界面里，统一从壳层读取
+  // 首次启动告诉用户数据存在哪块硬盘
+  useEffect(() => {
+    let alive = true;
+    fetchDataInfo()
+      .then((info) => {
+        if (alive && info.location.firstRun) {
+          setDataNotice(info.location);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(() => {
     let alive = true;
     void bridge.getAppVersion().then((value) => {
@@ -192,6 +209,35 @@ export default function App() {
 
         <main className="content">{renderPage()}</main>
       </div>
+
+
+      {dataNotice && (
+        <div className="dialog-mask">
+          <div className="dialog dialog-small">
+            <h2 className="dialog-title">数据保存在哪里</h2>
+            <p className="caption" style={{ marginTop: 8 }}>{dataNotice.message}</p>
+            <p className="caption" style={{ marginTop: 6, wordBreak: "break-all" }}>
+              数据库：{dataNotice.dbPath}
+            </p>
+            <p className="caption" style={{ marginTop: 6 }}>
+              右上角「硬盘剩余」显示的就是这块盘；以后可在「系统设置 → 数据位置」更换。
+            </p>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  void ackDataLocation();
+                  setDataNotice(null);
+                  setNotice("数据位置已记录，可在系统设置里更换。");
+                }}
+              >
+                知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="notice">{notice}</footer>
 

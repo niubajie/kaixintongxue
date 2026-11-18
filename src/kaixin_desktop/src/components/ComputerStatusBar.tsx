@@ -65,7 +65,7 @@ export function ComputerStatusBar() {
         className="computer-status-item"
         title={`数据目录所在盘 ${status.diskName || "?"}：可用 ${status.diskFreeGb.toFixed(1)} GB / 共 ${status.diskTotalGb.toFixed(0)} GB`}
       >
-        硬盘剩余 {formatGb(status.diskFreeGb)}/{formatGb(status.diskTotalGb)}
+        硬盘剩余 {status.diskName || ""} {formatGb(status.diskFreeGb)}/{formatGb(status.diskTotalGb)}
       </span>
       <span
         className="computer-status-item"

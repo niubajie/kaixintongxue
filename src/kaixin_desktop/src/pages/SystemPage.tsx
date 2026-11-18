@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   fetchAccount,
+  fetchDataInfo,
+  moveDataLocation,
+  type DataLocation,
   fetchAutostart,
   fetchServerConfig,
   saveServerConfig,
@@ -33,10 +36,43 @@ export function SystemPage({ onNotice }: Props) {
   const [serverBusy, setServerBusy] = useState(false);
   const [serverResult, setServerResult] = useState("");
   const [account, setAccount] = useState<AccountState | null>(null);
+  const [dataLocation, setDataLocation] = useState<DataLocation | null>(null);
+  const [dataBusy, setDataBusy] = useState(false);
   const [accountBusy, setAccountBusy] = useState(false);
   const [loginAccount, setLoginAccount] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginName, setLoginName] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetchDataInfo()
+      .then((info) => {
+        if (alive) {
+          setDataLocation(info.location);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const changeDataLocation = async () => {
+    const picked = await bridge.pickFolder();
+    if (!picked) {
+      return;
+    }
+    setDataBusy(true);
+    try {
+      const message = await moveDataLocation(picked);
+      onNotice(message);
+      setDataLocation((current) => (current ? { ...current, path: picked, firstRun: false } : current));
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "迁移失败");
+    } finally {
+      setDataBusy(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -311,6 +347,37 @@ export function SystemPage({ onNotice }: Props) {
               {autostartBusy ? "处理中…" : startup ? "已开启" : "已关闭"}
             </button>
           </div>
+        </div>
+
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 className="section-title">数据位置</h2>
+            <span className="tag">
+              {dataLocation ? `硬盘 ${dataLocation.drive}` : "读取中…"}
+            </span>
+          </div>
+          {dataLocation ? (
+            <>
+              <p className="list-card-detail" style={{ marginTop: 6 }}>
+                数据库保存在 <b>{dataLocation.drive}</b> 盘：{dataLocation.path}
+              </p>
+              <p className="caption" style={{ marginTop: 4 }}>
+                该盘剩余 {dataLocation.freeGb.toFixed(0)} GB / 共 {dataLocation.totalGb.toFixed(0)} GB ·
+                数据库文件 {(dataLocation.dbSizeBytes / 1024).toFixed(0)} KB
+              </p>
+              <p className="caption" style={{ marginTop: 4 }}>
+                右上角「硬盘剩余」显示的就是这块盘，换盘后两者会一起变。
+              </p>
+              <div className="row" style={{ marginTop: 10, gap: 8 }}>
+                <button type="button" className="secondary-btn" onClick={() => void changeDataLocation()} disabled={dataBusy}>
+                  {dataBusy ? "迁移中…" : "更换到其他硬盘"}
+                </button>
+                <span className="caption">迁移会复制数据库，重启后生效；旧目录需手动删除</span>
+              </div>
+            </>
+          ) : (
+            <p className="caption" style={{ marginTop: 6 }}>读取数据位置失败。</p>
+          )}
         </div>
 
         <div className="card">

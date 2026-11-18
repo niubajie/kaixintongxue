@@ -845,3 +845,50 @@ export async function installUpdate(path: string): Promise<void> {
     throw new Error(payload?.message ?? `启动安装包失败（HTTP ${response.status}）`);
   }
 }
+
+
+// ---------- 数据位置（数据库在哪块硬盘） ----------
+
+export interface DataLocation {
+  path: string;
+  dbPath: string;
+  drive: string;
+  freeGb: number;
+  totalGb: number;
+  dbSizeBytes: number;
+  firstRun: boolean;
+  message: string;
+}
+
+export interface DataInfo {
+  store: { path: string; sizeKb: number; customSkills: number; deployRuns: number; schemaVersion: number };
+  location: DataLocation;
+}
+
+export async function fetchDataInfo(): Promise<DataInfo> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/data/info`);
+  if (!response.ok) {
+    throw new Error(`读取数据位置失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as DataInfo;
+}
+
+export async function ackDataLocation(): Promise<void> {
+  const base = BASE;
+  await fetch(`${base}/api/data/ack`, { method: "POST" });
+}
+
+export async function moveDataLocation(dir: string): Promise<string> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/data/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dir })
+  });
+  const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+  if (!response.ok) {
+    throw new Error(payload?.message ?? `迁移失败（HTTP ${response.status}）`);
+  }
+  return payload?.message ?? "已迁移";
+}

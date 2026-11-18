@@ -18,6 +18,7 @@ type App struct {
 	downloadDir string
 	logDir      string
 	authDir     string
+	root        string
 	dataDir     string
 	deploy      deployer
 	store       *Store
@@ -51,6 +52,7 @@ func main() {
 		logDir:      filepath.Join(root, "logs"),
 		authDir:     filepath.Join(root, "auth"),
 	}
+	app.root = root
 	app.dataDir = filepath.Join(root, "data")
 	for _, dir := range []string{app.runtimeRoot, app.downloadDir, app.logDir, app.authDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -59,12 +61,10 @@ func main() {
 	}
 
 	// 本地库：所有持久化数据的唯一落点（docs/08 第 11 节）
-	// KAIXIN_DATA_DIR 可用于排障或测试时指定其他目录。
-	dataDir := filepath.Join(root, "data")
-	if custom := os.Getenv("KAIXIN_DATA_DIR"); custom != "" {
-		dataDir = custom
-		app.dataDir = custom
-	}
+	// 数据目录：环境变量 > 用户选过的位置 > 默认 root\data
+	dataDir, firstRun := resolveDataDir(root)
+	firstRunPending = firstRun
+	app.dataDir = dataDir
 	store, err := OpenStore(dataDir)
 	if err != nil {
 		// 建库失败不阻断整个服务：硬件检测、匹配、方案生成都还能用，
@@ -104,7 +104,9 @@ func main() {
 	mux.HandleFunc("GET /api/deploy/history", app.handleDeployHistory)
 	mux.HandleFunc("POST /api/deploy/resume", app.handleDeployResume)
 	mux.HandleFunc("POST /api/deploy/retry", app.handleDeployRetryStep)
-	mux.HandleFunc("GET /api/data/info", app.handleDataInfo)
+	mux.HandleFunc("GET /api/data/info", app.handleDataLocationInfo)
+	mux.HandleFunc("POST /api/data/ack", app.handleDataAck)
+	mux.HandleFunc("POST /api/data/move", app.handleDataMove)
 	mux.HandleFunc("GET /api/library/scan", app.handleLibraryScan)
 	mux.HandleFunc("POST /api/library/open", app.handleLibraryOpen)
 	mux.HandleFunc("POST /api/library/open-folder", app.handleLibraryOpenFolder)
