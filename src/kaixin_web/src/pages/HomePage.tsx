@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ModelSelector } from "../components/ModelSelector";
 import { AI_MODELS, type AiModelOption } from "../data";
 import { bridge } from "../platform";
-import { fetchASRStatus, transcribeAudio } from "../deployApi";
+import { fetchASRStatus, sendChat, transcribeAudio, type ChatResult } from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
@@ -67,6 +67,9 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
 
   const [attachments, setAttachments] = useState<string[]>([]);
   const [pendingMaterials, setPendingMaterials] = useState<PendingMaterial[]>([]);
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [sending, setSending] = useState(false);
+  const [lastResult, setLastResult] = useState<ChatResult | null>(null);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [wave, setWave] = useState<number[]>([]);
@@ -243,21 +246,35 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
     reader.readAsDataURL(blob);
   };
 
-  const send = () => {
+  const send = async () => {
     if (!input.trim() && attachments.length === 0) {
       onNotice("请先输入内容，再发送。");
       return;
     }
-    if (attachments.length > 0) {
-      onNotice(
-        `已提交：${input.trim().slice(0, 20) || "（无文字）"}，附带 ${attachments.length} 个附件。模型调用尚未接入。`
-      );
-    } else {
-      onNotice("已提交。模型调用尚未接入，当前仅记录输入。");
+    const text = input.trim();
+    if (!text) {
+      onNotice("附件已附上，请在输入框补充一句需求再发送。");
+      return;
     }
+
+    const nextMessages = [...messages, { role: "user" as const, content: text }];
+    setMessages(nextMessages);
     setInput("");
-    setAttachments([]);
-    setVoiceHint("");
+    setSending(true);
+    setLastResult(null);
+    try {
+      const result = await sendChat(nextMessages);
+      setMessages([...nextMessages, { role: "assistant", content: result.text }]);
+      setLastResult(result);
+      onNotice(`已由 ${result.model} 回答，耗时 ${(result.elapsedMs / 1000).toFixed(1)} 秒。`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "调用模型失败";
+      setMessages([...nextMessages, { role: "assistant", content: `（调用失败）${message}` }]);
+      onNotice(message);
+    } finally {
+      setSending(false);
+      setAttachments([]);
+    }
   };
 
   return (
@@ -373,7 +390,8 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
                   />
                 </svg>
               </button>
-              <button type="button" className="send-btn" title="发送" onClick={send}>
+              <button type="button" className="send-btn" title="发送" onClick={() => void send()}
+                disabled={sending}>
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                   <path
                     d="M3.2 9 L14.6 3.4 L11.8 14.6 L8.9 10.4 Z"
@@ -387,6 +405,26 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
             </div>
           </div>
         </div>
+
+        {(messages.length > 0 || sending) && (
+          <div className="chat-log">
+            {messages.map((message, index) => (
+              <div key={index} className={`chat-msg ${message.role}`}>
+                <span className="chat-role">{message.role === "user" ? "我" : "AI"}</span>
+                <div className="chat-text">{message.content}</div>
+              </div>
+            ))}
+            {sending && <p className="caption">正在生成…</p>}
+            {lastResult && (
+              <p className="caption chat-meta">
+                模型 {lastResult.model} · 输入 {lastResult.promptTokens} / 输出 {lastResult.completionTokens} tokens ·
+                耗时 {(lastResult.elapsedMs / 1000).toFixed(1)}s · 费用
+                {lastResult.costCents > 0 ? ` ¥${(lastResult.costCents / 100).toFixed(4)}` : " ¥0"}
+                {lastResult.note ? `（${lastResult.note}）` : ""}
+              </p>
+            )}
+          </div>
+        )}
 
         <p className="caption" style={{ marginTop: 18 }}>
           最新待确认资料{pendingMaterials.length > 0 ? `（${pendingMaterials.length} 份）` : ""}

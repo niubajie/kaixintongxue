@@ -892,3 +892,98 @@ export async function moveDataLocation(dir: string): Promise<string> {
   }
   return payload?.message ?? "已迁移";
 }
+
+
+// ---------- 模型调用（经本地网关） ----------
+
+export interface ModelConfigState {
+  baseUrl: string;
+  model: string;
+  hasApiKey: boolean;
+  inputPriceCents: number;
+  outputPriceCents: number;
+  localModels: string[];
+  available: boolean;
+  message: string;
+}
+
+export interface ChatResult {
+  text: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  costCents: number;
+  elapsedMs: number;
+  note: string;
+}
+
+export interface UsageItem {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  costCents: number;
+  elapsedMs: number;
+  createdAt: string;
+}
+
+export async function fetchModelConfig(): Promise<ModelConfigState> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/model/config`);
+  if (!response.ok) {
+    throw new Error(`读取模型配置失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as ModelConfigState;
+}
+
+export async function saveModelConfig(input: {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  inputPriceCents: number;
+  outputPriceCents: number;
+}): Promise<ModelConfigState> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/model/config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `保存失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as ModelConfigState;
+}
+
+export async function testModel(): Promise<{ ok: boolean; message: string; reply?: string; elapsedMs?: number }> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/model/test`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`测试失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as { ok: boolean; message: string; reply?: string; elapsedMs?: number };
+}
+
+export async function sendChat(messages: { role: string; content: string }[]): Promise<ChatResult> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages })
+  });
+  const payload = (await response.json().catch(() => null)) as (ChatResult & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `调用失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function fetchUsage(): Promise<UsageItem[]> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/chat/usage`);
+  if (!response.ok) {
+    throw new Error(`读取用量失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { items?: UsageItem[] };
+  return payload.items ?? [];
+}

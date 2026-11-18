@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   fetchAccount,
+  fetchModelConfig,
+  saveModelConfig,
+  testModel,
+  type ModelConfigState,
   fetchDataInfo,
   moveDataLocation,
   type DataLocation,
@@ -37,11 +41,71 @@ export function SystemPage({ onNotice }: Props) {
   const [serverResult, setServerResult] = useState("");
   const [account, setAccount] = useState<AccountState | null>(null);
   const [dataLocation, setDataLocation] = useState<DataLocation | null>(null);
+  const [modelCfg, setModelCfg] = useState<ModelConfigState | null>(null);
+  const [modelBusy, setModelBusy] = useState(false);
+  const [modelResult, setModelResult] = useState("");
+  const [modelForm, setModelForm] = useState({ baseUrl: "", model: "", apiKey: "", input: "0", output: "0" });
   const [dataBusy, setDataBusy] = useState(false);
   const [accountBusy, setAccountBusy] = useState(false);
   const [loginAccount, setLoginAccount] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginName, setLoginName] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetchModelConfig()
+      .then((cfg) => {
+        if (!alive) {
+          return;
+        }
+        setModelCfg(cfg);
+        setModelForm({
+          baseUrl: cfg.baseUrl,
+          model: cfg.model,
+          apiKey: "",
+          input: (cfg.inputPriceCents / 100).toString(),
+          output: (cfg.outputPriceCents / 100).toString()
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const saveModel = async () => {
+    setModelBusy(true);
+    try {
+      const cfg = await saveModelConfig({
+        baseUrl: modelForm.baseUrl,
+        model: modelForm.model,
+        apiKey: modelForm.apiKey,
+        inputPriceCents: Math.round(Number(modelForm.input || 0) * 100),
+        outputPriceCents: Math.round(Number(modelForm.output || 0) * 100)
+      });
+      setModelCfg(cfg);
+      setModelForm((current) => ({ ...current, apiKey: "" }));
+      setModelResult(cfg.message);
+      onNotice("模型配置已保存。");
+    } catch (err: unknown) {
+      setModelResult(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      setModelBusy(false);
+    }
+  };
+
+  const checkModel = async () => {
+    setModelBusy(true);
+    setModelResult("正在测试…");
+    try {
+      const result = await testModel();
+      setModelResult(result.ok ? `可用：${result.reply ?? ""}（${result.elapsedMs} ms）` : result.message);
+    } catch (err: unknown) {
+      setModelResult(err instanceof Error ? err.message : "测试失败");
+    } finally {
+      setModelBusy(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -378,6 +442,85 @@ export function SystemPage({ onNotice }: Props) {
           ) : (
             <p className="caption" style={{ marginTop: 6 }}>读取数据位置失败。</p>
           )}
+        </div>
+
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 className="section-title">模型接入</h2>
+            <span className={`tag${modelCfg?.available ? " accent" : ""}`}>
+              {modelCfg?.available ? "已配置" : "未配置"}
+            </span>
+          </div>
+          <p className="list-card-detail" style={{ marginTop: 6 }}>
+            {modelCfg?.message ?? "读取中…"}
+          </p>
+          <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ flex: 2, minWidth: 240 }}
+              placeholder="模型地址，例如 http://127.0.0.1:11434/v1"
+              value={modelForm.baseUrl}
+              onChange={(event) => setModelForm({ ...modelForm, baseUrl: event.target.value })}
+            />
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 160 }}
+              placeholder="模型名，例如 qwen2.5:3b"
+              value={modelForm.model}
+              onChange={(event) => setModelForm({ ...modelForm, model: event.target.value })}
+            />
+          </div>
+          {(modelCfg?.localModels ?? []).length > 0 && (
+            <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+              <span className="caption">本机可用：</span>
+              {(modelCfg?.localModels ?? []).map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => setModelForm({ ...modelForm, model: name })}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ flex: 2, minWidth: 240 }}
+              type="password"
+              placeholder={modelCfg?.hasApiKey ? "API Key 已保存（留空不修改）" : "API Key（本机模型可留空）"}
+              value={modelForm.apiKey}
+              onChange={(event) => setModelForm({ ...modelForm, apiKey: event.target.value })}
+            />
+            <input
+              className="input"
+              style={{ width: 120 }}
+              placeholder="输入价(元/百万)"
+              value={modelForm.input}
+              onChange={(event) => setModelForm({ ...modelForm, input: event.target.value })}
+            />
+            <input
+              className="input"
+              style={{ width: 120 }}
+              placeholder="输出价(元/百万)"
+              value={modelForm.output}
+              onChange={(event) => setModelForm({ ...modelForm, output: event.target.value })}
+            />
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            <button type="button" className="primary-btn" onClick={() => void saveModel()} disabled={modelBusy}>
+              保存
+            </button>
+            <button type="button" className="secondary-btn" onClick={() => void checkModel()} disabled={modelBusy}>
+              测试连接
+            </button>
+            <span className="caption">{modelResult}</span>
+          </div>
+          <p className="caption" style={{ marginTop: 8 }}>
+            API Key 只保存在本机数据库，不会下发到页面；本机 Ollama 模型无需密钥。
+          </p>
         </div>
 
         <div className="card">
