@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -260,6 +261,27 @@ func (a *App) setUserStatus(ctx context.Context, id int64, status string) error 
 func (a *App) deleteUser(ctx context.Context, id int64) error {
 	_, err := a.db.Exec(ctx, "DELETE FROM users WHERE id = $1", id)
 	return err
+}
+
+// ensureOwner 保证系统里至少有一个 Owner。
+// 全新部署时第一个注册的人应该是拥有者，否则谁都无法管理成员与目录。
+func (a *App) ensureOwner(ctx context.Context) error {
+	if a.countOwners(ctx) > 0 {
+		return nil
+	}
+	var id int64
+	var account string
+	err := a.db.QueryRow(ctx,
+		`SELECT id, account FROM users ORDER BY id ASC LIMIT 1`).Scan(&id, &account)
+	if err != nil {
+		return nil // 还没有任何用户，等第一个注册的人
+	}
+	if err := a.setUserRole(ctx, id, "Owner"); err != nil {
+		return err
+	}
+	a.audit(ctx, "system", "owner_bootstrap", account+" 被设为 Owner（首个账号）")
+	log.Printf("首个账号 %s 已提升为 Owner", account)
+	return nil
 }
 
 func (a *App) countOwners(ctx context.Context) int {

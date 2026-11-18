@@ -39,6 +39,10 @@ func main() {
 	if err := app.seed(ctx); err != nil {
 		log.Printf("初始化示例数据失败: %v", err)
 	}
+	// 首个账号自动成为 Owner，否则没人能管理成员与目录
+	if err := app.ensureOwner(ctx); err != nil {
+		log.Printf("检查 Owner 失败：%v", err)
+	}
 
 	mux := http.NewServeMux()
 	app.routes(mux)
@@ -85,6 +89,10 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/users/{id}/status", a.handleUserStatus)
 	mux.HandleFunc("DELETE /api/admin/users/{id}", a.handleUserDelete)
 	mux.HandleFunc("GET /api/admin/audit", a.handleAudit)
+	mux.HandleFunc("POST /api/admin/backups", a.handleBackupCreate)
+	mux.HandleFunc("GET /api/admin/backups", a.handleBackupList)
+	mux.HandleFunc("POST /api/admin/backups/{id}/restore", a.handleBackupRestore)
+	mux.HandleFunc("GET /api/admin/backups/{id}/download", a.handleBackupDownload)
 
 	mux.HandleFunc("POST /api/admin/software", a.handleSoftwareCreate)
 	mux.HandleFunc("PUT /api/admin/software/{id}", a.handleSoftwareUpdate)
