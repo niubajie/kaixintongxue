@@ -161,6 +161,7 @@ export function ApplicationPage({ onNotice }: Props) {
   const [diaryContent, setDiaryContent] = useState("");
 
   const [materialKeyword, setMaterialKeyword] = useState("");
+  const [dashboardFull, setDashboardFull] = useState(false);
   const [keywordEditing, setKeywordEditing] = useState<{ id: string; value: string } | null>(null);
 
   const [confirm, setConfirm] = useState<{ kind: "app" | "diary" | "material"; id: string; name: string } | null>(
@@ -719,10 +720,29 @@ export function ApplicationPage({ onNotice }: Props) {
               )}
 
               {tab === "dashboard" && (
-                <div className="tab-body">
+                <div className={dashboardFull ? "tab-body dashboard-full" : "tab-body"}>
                   <div className="row" style={{ justifyContent: "space-between" }}>
                     <h3 className="section-title">数据窗</h3>
-                    <span className="caption">{KIND_LABEL[dashboard.kind]}类指标</span>
+                    <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                      <span className="caption">{KIND_LABEL[dashboard.kind]}类指标</span>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => setDashboardFull((current) => !current)}
+                      >
+                        {dashboardFull ? "退出全屏" : "全屏"}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => {
+                          setDashboardFull(false);
+                          setTab("diary");
+                        }}
+                      >
+                        返回
+                      </button>
+                    </div>
                   </div>
 
                   <div className="stats" style={{ marginTop: 10 }}>

@@ -1437,3 +1437,13 @@ input[type="range"] {
 .computer-status-item {
   font-variant-numeric: tabular-nums;
 }
+
+/* 数据窗全屏：铺满窗口，保留滚动，不遮挡系统窗口按钮 */
+.dashboard-full {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg);
+  overflow: auto;
+  padding: 20px 24px 28px;
+}
