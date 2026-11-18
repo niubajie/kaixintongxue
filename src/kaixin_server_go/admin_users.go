@@ -6,36 +6,39 @@ import (
 	"strings"
 )
 
+// handleAdminUsers 成员列表：登录即可读，但成员只能看到自己一条（SYS-02）。
 func (a *App) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdmin(w, r); !ok {
+	actor, ok := a.requireLogin(w, r, "admin.users.list")
+	if !ok {
 		return
 	}
 	query := r.URL.Query()
-	page := 1
-	if parsed, err := strconv.Atoi(query.Get("page")); err == nil && parsed > 0 {
-		page = parsed
-	}
-	size := 20
-	if parsed, err := strconv.Atoi(query.Get("size")); err == nil && parsed > 0 && parsed <= 100 {
-		size = parsed
-	}
+	paging := parseMemberPage(r)
 
 	ctx := r.Context()
-	users, total, err := a.listUsers(ctx, strings.TrimSpace(query.Get("keyword")), query.Get("role"), size, (page-1)*size)
+	users, total, err := a.listUsers(ctx, strings.TrimSpace(query.Get("keyword")), query.Get("role"),
+		paging.Size, (paging.Page-1)*paging.Size)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, "读取用户失败。")
 		return
 	}
 
-	items := make([]UserDTO, 0, len(users))
-	for _, user := range users {
+	visible := visibleUsers(actor, users)
+	items := make([]UserDTO, 0, len(visible))
+	for _, user := range visible {
 		items = append(items, toUserDTO(user))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"total": total, "page": page, "size": size, "items": items})
+	// 成员被过滤后，总数按实际可见条数返回，避免泄漏他人数量
+	if len(visible) != len(users) {
+		total = len(visible)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"total": total, "page": paging.Page, "size": paging.Size, "items": items,
+	})
 }
 
 func (a *App) handleUserRole(w http.ResponseWriter, r *http.Request) {
-	admin, ok := a.requireAdmin(w, r)
+	admin, ok := a.requireLogin(w, r, "admin.users.role")
 	if !ok {
 		return
 	}
@@ -56,15 +59,19 @@ func (a *App) handleUserRole(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "角色只能是 Owner / Admin / Member。")
 		return
 	}
-	if id == admin.ID {
-		fail(w, http.StatusBadRequest, "不能修改自己的角色。")
-		return
-	}
 
 	ctx := r.Context()
 	target, err := a.findUserByID(ctx, id)
 	if err != nil || target == nil {
 		fail(w, http.StatusNotFound, "用户不存在。")
+		return
+	}
+	if allowed, reason := canManageUser(admin, target); !allowed {
+		a.denyWithAudit(w, r, admin, "admin.users.role", target.Account, reason)
+		return
+	}
+	if allowed, reason := canAssignRole(admin, role); !allowed {
+		a.denyWithAudit(w, r, admin, "admin.users.role", target.Account, reason)
 		return
 	}
 	if target.Role == "Owner" && role != "Owner" && a.countOwners(ctx) <= 1 {
@@ -80,7 +87,7 @@ func (a *App) handleUserRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleUserStatus(w http.ResponseWriter, r *http.Request) {
-	admin, ok := a.requireAdmin(w, r)
+	admin, ok := a.requireLogin(w, r, "admin.users.status")
 	if !ok {
 		return
 	}
@@ -101,15 +108,15 @@ func (a *App) handleUserStatus(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "状态不合法。")
 		return
 	}
-	if id == admin.ID {
-		fail(w, http.StatusBadRequest, "不能停用自己的账号。")
-		return
-	}
 
 	ctx := r.Context()
 	target, err := a.findUserByID(ctx, id)
 	if err != nil || target == nil {
 		fail(w, http.StatusNotFound, "用户不存在。")
+		return
+	}
+	if allowed, reason := canManageUser(admin, target); !allowed {
+		a.denyWithAudit(w, r, admin, "admin.users.status", target.Account, reason)
 		return
 	}
 	if err := a.setUserStatus(ctx, id, status); err != nil {
@@ -127,7 +134,7 @@ func (a *App) handleUserStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleUserDelete(w http.ResponseWriter, r *http.Request) {
-	admin, ok := a.requireAdmin(w, r)
+	admin, ok := a.requireLogin(w, r, "admin.users.delete")
 	if !ok {
 		return
 	}
@@ -136,15 +143,15 @@ func (a *App) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "用户不存在。")
 		return
 	}
-	if id == admin.ID {
-		fail(w, http.StatusBadRequest, "不能删除自己。")
-		return
-	}
 
 	ctx := r.Context()
 	target, err := a.findUserByID(ctx, id)
 	if err != nil || target == nil {
 		fail(w, http.StatusNotFound, "用户不存在。")
+		return
+	}
+	if allowed, reason := canManageUser(admin, target); !allowed {
+		a.denyWithAudit(w, r, admin, "admin.users.delete", target.Account, reason)
 		return
 	}
 	if target.Role == "Owner" && a.countOwners(ctx) <= 1 {
@@ -160,7 +167,12 @@ func (a *App) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleAudit(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdmin(w, r); !ok {
+	actor, ok := a.requireLogin(w, r, "admin.audit")
+	if !ok {
+		return
+	}
+	if !canReadAudit(actor) {
+		a.denyWithAudit(w, r, actor, "admin.audit", "", reasonNotAdmin)
 		return
 	}
 	limit := 100

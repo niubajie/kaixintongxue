@@ -105,7 +105,7 @@ func (a *App) handleSkillPackages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleSoftwareCreate(w http.ResponseWriter, r *http.Request) {
-	admin, ok := a.requireAdmin(w, r)
+	admin, ok := a.requireCatalogEditor(w, r, "admin.software.write")
 	if !ok {
 		return
 	}
@@ -139,7 +139,7 @@ func (a *App) handleSoftwareCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleSoftwareUpdate(w http.ResponseWriter, r *http.Request) {
-	admin, ok := a.requireAdmin(w, r)
+	admin, ok := a.requireCatalogEditor(w, r, "admin.software.write")
 	if !ok {
 		return
 	}
@@ -183,7 +183,7 @@ func (a *App) handleSoftwareUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleSoftwareDelete(w http.ResponseWriter, r *http.Request) {
-	admin, ok := a.requireAdmin(w, r)
+	admin, ok := a.requireCatalogEditor(w, r, "admin.software.write")
 	if !ok {
 		return
 	}
@@ -220,7 +220,7 @@ func bumpVersion(current string) string {
 }
 
 func (a *App) handleNextVersion(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.requireAdmin(w, r); !ok {
+	if _, ok := a.requireCatalogEditor(w, r, "admin.software.list"); !ok {
 		return
 	}
 	id, valid := parseInt64(r.PathValue("id"))
