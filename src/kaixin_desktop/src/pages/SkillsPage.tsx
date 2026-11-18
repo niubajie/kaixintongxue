@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setDeploying } from "../runtimeState";
+import { speak } from "../voice";
 import { usePersistentState } from "../assistant";
 import { SKILLS, type SkillOption } from "../data";
 import {
@@ -230,6 +231,27 @@ export function SkillsPage({ onNotice }: Props) {
   useEffect(() => {
     setDeploying(Boolean(job && job.state === "running"));
     return () => setDeploying(false);
+  }, [job]);
+
+  // FR-SYS-04：部署结束与失败用中文播报（开关在系统设置里，默认关闭）
+  const spokenStateRef = useRef<string>("");
+  useEffect(() => {
+    if (!job) {
+      return;
+    }
+    const key = `${job.id}:${job.state}`;
+    if (spokenStateRef.current === key) {
+      return;
+    }
+    spokenStateRef.current = key;
+    if (job.state === "done") {
+      speak("部署完成，全部步骤已结束");
+    } else if (job.state === "failed") {
+      const failed = job.steps.find((step) => step.status === "failed");
+      speak(failed ? `部署失败，出错步骤是${failed.name}` : "部署失败，请查看日志");
+    } else if (job.state === "cancelled") {
+      speak("部署已取消");
+    }
   }, [job]);
 
   // 部署任务轮询：running 时每 1.5 秒刷新一次。

@@ -7,6 +7,7 @@ import {
   testServer
 } from "../deployApi";
 import { bridge } from "../platform";
+import { isVoiceEnabled, setVoiceEnabled, speak, voiceSupported } from "../voice";
 import { PERMISSIONS } from "../data";
 
 interface Props {
@@ -20,7 +21,7 @@ const MEMBERS = [
 ];
 
 export function SystemPage({ onNotice }: Props) {
-  const [speech, setSpeech] = useState(true);
+  const [speech, setSpeech] = useState(() => isVoiceEnabled());
   const [startup, setStartup] = useState(false);
   const [autostartBusy, setAutostartBusy] = useState(false);
   const [serverURL, setServerURL] = useState("");
@@ -190,7 +191,21 @@ export function SystemPage({ onNotice }: Props) {
             <button
               type="button"
               className={`segment${speech ? " active" : ""}`}
-              onClick={() => setSpeech(!speech)}
+              onClick={() => {
+                const next = !speech;
+                setSpeech(next);
+                setVoiceEnabled(next);
+                if (next) {
+                  speak("语音播报已开启");
+                }
+                onNotice(
+                  next
+                    ? voiceSupported()
+                      ? "语音播报已开启。"
+                      : "语音播报已开启，但当前环境不支持语音合成。"
+                    : "语音播报已关闭。"
+                );
+              }}
             >
               {speech ? "已开启" : "已关闭"}
             </button>

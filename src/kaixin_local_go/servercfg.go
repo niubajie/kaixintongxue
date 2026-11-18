@@ -121,10 +121,11 @@ func fetchJSON(ctx context.Context, target string) ([]byte, int, error) {
 }
 
 type ServerTestResult struct {
-	OK      bool   `json:"ok"`
-	Status  int    `json:"status"`
-	Message string `json:"message"`
-	Body    string `json:"body"`
+	OK        bool   `json:"ok"`
+	Status    int    `json:"status"`
+	Message   string `json:"message"`
+	Body      string `json:"body"`
+	LatencyMs int64  `json:"latencyMs"`
 }
 
 func (a *App) handleServerTest(w http.ResponseWriter, r *http.Request) {
@@ -134,21 +135,24 @@ func (a *App) handleServerTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	started := time.Now()
 	body, status, err := fetchJSON(r.Context(), base+"/api/health")
+	latency := time.Since(started).Milliseconds()
 	if err != nil {
 		writeJSON(w, http.StatusOK, ServerTestResult{
-			OK: false, Status: 0,
+			OK: false, Status: 0, LatencyMs: latency,
 			Message: "连接失败：" + err.Error(),
 		})
 		return
 	}
 	ok := status == http.StatusOK
-	message := "连接成功"
+	message := fmt.Sprintf("连接成功 · 延迟 %d ms", latency)
 	if !ok {
-		message = fmt.Sprintf("服务器返回 HTTP %d", status)
+		message = fmt.Sprintf("服务器返回 HTTP %d · 延迟 %d ms", status, latency)
 	}
 	writeJSON(w, http.StatusOK, ServerTestResult{
 		OK: ok, Status: status, Message: message, Body: truncate(string(body), 200),
+		LatencyMs: latency,
 	})
 }
 
