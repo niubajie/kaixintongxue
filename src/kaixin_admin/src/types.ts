@@ -61,3 +61,44 @@ export interface Profile {
   displayName: string;
   role: Role;
 }
+
+export interface MaterialProject {
+  id: number;
+  parentId: number | null;
+  title: string;
+  keywords: string;
+  sites: string;
+  schedule: string;
+  review: "pending" | "approved" | "rejected";
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  runs: number;
+}
+
+export interface RechargeRecord {
+  id: number;
+  userId: number;
+  account: string;
+  amountCents: number;
+  channel: string;
+  status: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface ModelPrice {
+  model: string;
+  inputPerMillionCents: number;
+  outputPerMillionCents: number;
+  updatedAt: string;
+}
+
+export interface Optimization {
+  id: number;
+  version: string;
+  category: string;
+  detail: string;
+  source: string;
+  createdAt: string;
+}

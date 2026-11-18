@@ -73,7 +73,13 @@ func (a *App) handleSoftwareList(w http.ResponseWriter, r *http.Request) {
 	}
 	result := make([]SoftwareDTO, 0, len(items))
 	for _, item := range items {
-		result = append(result, a.buildSoftwareDTO(r, item))
+		dto := a.buildSoftwareDTO(r, item)
+		// CLD-06：对外目录必须带 SHA-256。没有校验值的条目不下发，
+		// 避免客户端拿到无法验证的安装包。
+		if dto.Current != nil && dto.Current.SHA256 == "" {
+			continue
+		}
+		result = append(result, dto)
 	}
 	writeJSON(w, http.StatusOK, result)
 }

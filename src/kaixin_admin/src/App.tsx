@@ -5,8 +5,11 @@ import { UsersPanel } from "./components/UsersPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
 import { VersionsPanel } from "./components/VersionsPanel";
 import { NotesPanel } from "./components/NotesPanel";
+import { MaterialsPanel } from "./components/MaterialsPanel";
+import { BillingPanel } from "./components/BillingPanel";
+import { OptimizationsPanel } from "./components/OptimizationsPanel";
 
-type Tab = "users" | "skills" | "versions" | "notes";
+type Tab = "users" | "skills" | "versions" | "notes" | "materials" | "billing" | "optimizations";
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: "users", label: "用户管理" },
@@ -137,6 +140,9 @@ export function App() {
           {tab === "skills" && <SkillsPanel skills={skills} reload={loadSkills} notify={notify} />}
           {tab === "versions" && <VersionsPanel skills={skills} reload={loadSkills} notify={notify} />}
           {tab === "notes" && <NotesPanel notify={notify} />}
+          {tab === "materials" && <MaterialsPanel notify={notify} />}
+          {tab === "billing" && <BillingPanel notify={notify} />}
+          {tab === "optimizations" && <OptimizationsPanel notify={notify} />}
         </div>
       </main>
 

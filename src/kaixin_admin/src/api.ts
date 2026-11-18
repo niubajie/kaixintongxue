@@ -1,4 +1,17 @@
-import type { AdminUser, Profile, Role, Skill, SkillInput, UserStatus, VersionInfo, VersionNote } from "./types";
+import type {
+  AdminUser,
+  MaterialProject,
+  ModelPrice,
+  Optimization,
+  Profile,
+  RechargeRecord,
+  Role,
+  Skill,
+  SkillInput,
+  UserStatus,
+  VersionInfo,
+  VersionNote
+} from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -106,5 +119,35 @@ export const api = {
   notes: () => request<VersionNote[]>("/api/version-notes"),
 
   addNote: (body: { version: string; title: string; detail: string }) =>
-    request<{ message: string }>("/api/admin/version-notes", { method: "POST", body: JSON.stringify(body) })
+    request<{ message: string }>("/api/admin/version-notes", { method: "POST", body: JSON.stringify(body) }),
+
+  // ---- 资料项目 ----
+  materials: () => request<{ items: MaterialProject[] }>("/api/admin/materials"),
+
+  saveMaterial: (body: Partial<MaterialProject> & { title: string }) =>
+    request<{ message: string }>("/api/admin/materials", { method: "POST", body: JSON.stringify(body) }),
+
+  deleteMaterial: (id: number) =>
+    request<{ message: string }>(`/api/admin/materials/${id}`, { method: "DELETE" }),
+
+  runMaterial: (id: number) =>
+    request<{ message: string }>(`/api/admin/materials/${id}/run`, { method: "POST" }),
+
+  // ---- 充值 ----
+  recharges: () => request<{ items: RechargeRecord[] }>("/api/admin/recharges"),
+
+  addRecharge: (body: { account: string; amountCents: number; channel: string; note: string }) =>
+    request<{ message: string }>("/api/admin/recharges", { method: "POST", body: JSON.stringify(body) }),
+
+  // ---- Token 价格 ----
+  prices: () => request<{ items: ModelPrice[] }>("/api/admin/model-prices"),
+
+  savePrice: (body: { model: string; inputPerMillionCents: number; outputPerMillionCents: number }) =>
+    request<{ message: string }>("/api/admin/model-prices", { method: "POST", body: JSON.stringify(body) }),
+
+  // ---- 自主优化 ----
+  optimizations: () => request<{ items: Optimization[] }>("/api/admin/optimizations"),
+
+  addOptimization: (body: { version: string; category: string; detail: string }) =>
+    request<{ message: string }>("/api/admin/optimizations", { method: "POST", body: JSON.stringify(body) })
 };

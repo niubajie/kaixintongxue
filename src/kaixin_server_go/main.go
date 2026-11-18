@@ -39,6 +39,10 @@ func main() {
 	if err := app.seed(ctx); err != nil {
 		log.Printf("初始化示例数据失败: %v", err)
 	}
+	if err := app.ensureExtraSchema(ctx); err != nil {
+		log.Printf("初始化管理端数据表失败: %v", err)
+	}
+	app.startMaterialScheduler(ctx)
 	// 首个账号自动成为 Owner，否则没人能管理成员与目录
 	if err := app.ensureOwner(ctx); err != nil {
 		log.Printf("检查 Owner 失败：%v", err)
@@ -91,6 +95,17 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/users/{id}/status", a.handleUserStatus)
 	mux.HandleFunc("DELETE /api/admin/users/{id}", a.handleUserDelete)
 	mux.HandleFunc("GET /api/admin/audit", a.handleAudit)
+	mux.HandleFunc("GET /api/admin/materials", a.handleMaterialList)
+	mux.HandleFunc("POST /api/admin/materials", a.handleMaterialSave)
+	mux.HandleFunc("DELETE /api/admin/materials/{id}", a.handleMaterialDelete)
+	mux.HandleFunc("POST /api/admin/materials/{id}/run", a.handleMaterialRun)
+	mux.HandleFunc("GET /api/admin/recharges", a.handleRechargeList)
+	mux.HandleFunc("POST /api/admin/recharges", a.handleRechargeCreate)
+	mux.HandleFunc("GET /api/admin/model-prices", a.handlePriceList)
+	mux.HandleFunc("POST /api/admin/model-prices", a.handlePriceSave)
+	mux.HandleFunc("GET /api/admin/optimizations", a.handleOptimizationList)
+	mux.HandleFunc("POST /api/admin/optimizations", a.handleOptimizationCreate)
+	mux.HandleFunc("POST /api/optimizations/external", a.handleOptimizationExternal)
 	mux.HandleFunc("POST /api/admin/backups", a.handleBackupCreate)
 	mux.HandleFunc("GET /api/admin/backups", a.handleBackupList)
 	mux.HandleFunc("POST /api/admin/backups/{id}/restore", a.handleBackupRestore)
