@@ -1122,3 +1122,37 @@ export async function summarizeChat(
     elapsedMs: payload.elapsedMs ?? 0
   };
 }
+
+
+// ---------- 微信扫码登录 ----------
+
+export interface WechatStart {
+  state: string;
+  mode: string;
+  qrUrl: string;
+  expiresIn: number;
+}
+
+export async function wechatLoginStart(): Promise<WechatStart> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/account/wechat/start`, { method: "POST" });
+  const payload = (await response.json().catch(() => null)) as (WechatStart & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `发起微信登录失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function wechatLoginPoll(
+  state: string
+): Promise<{ status: string; user?: { account: string; displayName: string; role: string }; message?: string }> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/account/wechat/poll?state=${encodeURIComponent(state)}`);
+  const payload = (await response.json().catch(() => null)) as
+    | { status?: string; user?: { account: string; displayName: string; role: string }; message?: string }
+    | null;
+  if (!response.ok) {
+    throw new Error(payload?.message ?? `轮询失败（HTTP ${response.status}）`);
+  }
+  return { status: payload?.status ?? "unknown", user: payload?.user, message: payload?.message };
+}

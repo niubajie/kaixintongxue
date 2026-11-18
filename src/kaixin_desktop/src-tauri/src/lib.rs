@@ -24,6 +24,18 @@ fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// 用系统默认浏览器打开链接（微信扫码登录要跳出应用去扫码）。
+#[tauri::command]
+fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_shell::ShellExt;
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("只允许打开 http/https 链接".into());
+    }
+    app.shell()
+        .open(url, None)
+        .map_err(|err| format!("打开链接失败：{err}"))
+}
+
 /// 前端读取本地服务端口；sidecar 启动失败时返回 0，前端据此提示用户。
 #[tauri::command]
 fn local_service_port(state: State<'_, LocalService>) -> u16 {
@@ -151,7 +163,12 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![app_version, local_service_port, app_exe_path])
+        .invoke_handler(tauri::generate_handler![
+            app_version,
+            local_service_port,
+            app_exe_path,
+            open_external
+        ])
         .run(tauri::generate_context!())
         .expect("启动开心同学桌面端失败");
 }

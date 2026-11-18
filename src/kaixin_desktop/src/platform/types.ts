@@ -18,6 +18,8 @@ export interface DesktopBridge {
     pickFolder: boolean;
     /** 能否多选文件（仅桌面端为真） */
     pickFiles: boolean;
+    /** 能否用系统默认浏览器打开外部链接（微信扫码登录用） */
+    openExternal: boolean;
   };
 
   getAppVersion(): Promise<string>;
@@ -39,6 +41,9 @@ export interface DesktopBridge {
    * 弹出系统文件夹选择器，返回所选目录；用户取消或环境不支持时返回 null。
    */
   pickFolder(): Promise<string | null>;
+
+  /** 用系统默认浏览器打开链接；不支持时抛错，由调用方提示用户手动打开。 */
+  openExternal(url: string): Promise<void>;
 
   window: {
     minimize(): Promise<void>;

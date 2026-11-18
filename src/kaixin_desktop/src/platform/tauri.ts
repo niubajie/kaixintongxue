@@ -18,6 +18,7 @@ export function createTauriBridge(): DesktopBridge {
       appVersion: true,
       localService: true,
       pickFolder: true,
+    openExternal: true,
       pickFiles: true
     },
 
@@ -27,7 +28,12 @@ export function createTauriBridge(): DesktopBridge {
       return invoke<string>("app_version");
     },
 
-    async pickFolder(): Promise<string | null> {
+    async openExternal(url: string): Promise<void> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("open_external", { url });
+  },
+
+  async pickFolder(): Promise<string | null> {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const picked = await open({ directory: true, multiple: false, title: "选择资料文件夹" });
       return typeof picked === "string" && picked ? picked : null;

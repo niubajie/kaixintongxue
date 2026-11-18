@@ -42,6 +42,9 @@ func main() {
 	if err := app.ensureExtraSchema(ctx); err != nil {
 		log.Printf("初始化管理端数据表失败: %v", err)
 	}
+	if err := app.ensureWechatSchema(ctx); err != nil {
+		log.Printf("初始化微信登录表失败: %v", err)
+	}
 	app.startMaterialScheduler(ctx)
 	// 首个账号自动成为 Owner，否则没人能管理成员与目录
 	if err := app.ensureOwner(ctx); err != nil {
@@ -81,6 +84,12 @@ func (a *App) routes(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /api/auth/register", a.handleRegister)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
+	mux.HandleFunc("POST /api/auth/wechat/start", a.handleWechatStart)
+	mux.HandleFunc("GET /api/auth/wechat/poll", a.handleWechatPoll)
+	mux.HandleFunc("GET /api/auth/wechat/callback", a.handleWechatCallback)
+	mux.HandleFunc("GET /auth/wechat/mock", a.handleWechatMockPage)
+	mux.HandleFunc("POST /api/auth/wechat/mock-confirm", a.handleWechatMockConfirm)
+	mux.HandleFunc("POST /api/auth/wechat/bind", a.handleWechatBind)
 	mux.HandleFunc("POST /api/auth/logout", a.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", a.handleMe)
 

@@ -15,6 +15,8 @@ import {
   signIn,
   signOut,
   testServer,
+  wechatLoginPoll,
+  wechatLoginStart,
   type AccountState
 } from "../deployApi";
 import { bridge } from "../platform";
@@ -47,6 +49,8 @@ export function SystemPage({ onNotice }: Props) {
   const [modelForm, setModelForm] = useState({ baseUrl: "", model: "", apiKey: "", input: "0", output: "0" });
   const [dataBusy, setDataBusy] = useState(false);
   const [accountBusy, setAccountBusy] = useState(false);
+  const [wechatBusy, setWechatBusy] = useState(false);
+  const [wechatHint, setWechatHint] = useState("");
   const [loginAccount, setLoginAccount] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginName, setLoginName] = useState("");
@@ -180,6 +184,40 @@ export function SystemPage({ onNotice }: Props) {
       onNotice(err instanceof Error ? err.message : "退出失败");
     } finally {
       setAccountBusy(false);
+    }
+  };
+
+  // 微信扫码登录：打开扫码页 → 轮询直到授权 → 刷新账号状态
+  const startWechatLogin = async () => {
+    setWechatBusy(true);
+    setWechatHint("正在创建扫码请求…");
+    try {
+      const start = await wechatLoginStart();
+      await bridge.openExternal(start.qrUrl);
+      setWechatHint(start.mode === "mock" ? "已打开联调扫码页，点确认即可登录" : "已打开微信扫码页，扫码确认后自动登录");
+      const deadline = Date.now() + 5 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const poll = await wechatLoginPoll(start.state);
+        if (poll.status === "authorized") {
+          const state = await fetchAccount();
+          setAccount(state);
+          setWechatHint("微信登录成功");
+          onNotice(`微信登录成功：${poll.user?.displayName ?? ""}`);
+          return;
+        }
+        if (poll.status === "expired" || poll.status === "unknown") {
+          setWechatHint("二维码已过期，请重新发起");
+          return;
+        }
+      }
+      setWechatHint("等待超时，请重新发起");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "微信登录失败";
+      setWechatHint(message);
+      onNotice(message);
+    } finally {
+      setWechatBusy(false);
     }
   };
 
@@ -327,6 +365,12 @@ export function SystemPage({ onNotice }: Props) {
                 </button>
                 {account?.message && <span className="caption">{account.message}</span>}
               </div>
+              <div className="row" style={{ gap: 8, marginTop: 10 }}>
+                <button type="button" className="secondary-btn" onClick={() => void startWechatLogin()} disabled={wechatBusy}>
+                  {wechatBusy ? "等待扫码…" : "微信扫码登录"}
+                </button>
+                {wechatHint && <span className="caption">{wechatHint}</span>}
+              </div>
             </>
           )}
 
@@ -469,6 +513,26 @@ export function SystemPage({ onNotice }: Props) {
               value={modelForm.model}
               onChange={(event) => setModelForm({ ...modelForm, model: event.target.value })}
             />
+          </div>
+          <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            <span className="caption">常用供应商：</span>
+            {[
+              { name: "本机 Ollama", baseUrl: "http://127.0.0.1:11434/v1", model: "qwen2.5:3b" },
+              { name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+              { name: "通义千问", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus" },
+              { name: "智谱 GLM", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" }
+            ].map((preset) => (
+              <button
+                key={preset.name}
+                type="button"
+                className="ghost-btn"
+                onClick={() =>
+                  setModelForm((current) => ({ ...current, baseUrl: preset.baseUrl, model: preset.model }))
+                }
+              >
+                {preset.name}
+              </button>
+            ))}
           </div>
           {(modelCfg?.localModels ?? []).length > 0 && (
             <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>

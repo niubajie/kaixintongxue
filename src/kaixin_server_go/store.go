@@ -174,6 +174,15 @@ func (a *App) userByToken(ctx context.Context, token string) (*User, error) {
 	return &user, nil
 }
 
+func (a *App) userByID(ctx context.Context, id int64) (*User, error) {
+	row := a.db.QueryRow(ctx, "SELECT "+userColumns+" FROM users WHERE id = $1", id)
+	user, err := scanUser(row)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (a *App) createUser(ctx context.Context, account, password, displayName, phone string) (*User, error) {
 	hash, salt := hashPassword(password)
 	var id int64

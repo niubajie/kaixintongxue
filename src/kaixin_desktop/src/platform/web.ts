@@ -11,11 +11,19 @@ export const webBridge: DesktopBridge = {
     appVersion: false,
     localService: false,
     pickFolder: false,
+    openExternal: true,
     pickFiles: false
   },
 
   async getAppVersion(): Promise<string> {
     return "web";
+  },
+
+  async openExternal(url: string): Promise<void> {
+    const opened = window.open(url, "_blank", "noopener");
+    if (!opened) {
+      throw new Error("浏览器拦截了弹窗，请手动打开：" + url);
+    }
   },
 
   async pickFolder(): Promise<string | null> {

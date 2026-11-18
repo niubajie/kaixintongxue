@@ -141,6 +141,8 @@ func main() {
 	mux.HandleFunc("POST /api/account/login", app.handleAccountLogin)
 	mux.HandleFunc("GET /api/account/me", app.handleAccountMe)
 	mux.HandleFunc("POST /api/account/logout", app.handleAccountLogout)
+	mux.HandleFunc("POST /api/account/wechat/start", app.handleWechatStartProxy)
+	mux.HandleFunc("GET /api/account/wechat/poll", app.handleWechatPollProxy)
 	mux.HandleFunc("GET /api/skills/custom", app.handleListCustomSkills)
 	mux.HandleFunc("POST /api/skills/custom", app.handleSaveCustomSkill)
 	mux.HandleFunc("DELETE /api/skills/custom/{id}", app.handleDeleteCustomSkill)
