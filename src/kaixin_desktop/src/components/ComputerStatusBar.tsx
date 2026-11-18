@@ -63,15 +63,15 @@ export function ComputerStatusBar() {
       </span>
       <span
         className="computer-status-item"
-        title={`系统盘 C: 可用 ${status.diskFreeGb.toFixed(1)} GB / 共 ${status.diskTotalGb.toFixed(0)} GB`}
+        title={`数据目录所在盘 ${status.diskName || "?"}：可用 ${status.diskFreeGb.toFixed(1)} GB / 共 ${status.diskTotalGb.toFixed(0)} GB`}
       >
-        硬盘 {formatGb(status.diskFreeGb)}
+        硬盘剩余 {formatGb(status.diskFreeGb)}/{formatGb(status.diskTotalGb)}
       </span>
       <span
         className="computer-status-item"
         title={`内存可用 ${status.memFreeGb.toFixed(1)} GB / 共 ${status.memTotalGb.toFixed(1)} GB`}
       >
-        内存 {formatGb(status.memFreeGb)}
+        内存剩余 {formatGb(status.memFreeGb)}/{formatGb(status.memTotalGb)}
       </span>
       <span
         className="computer-status-item"

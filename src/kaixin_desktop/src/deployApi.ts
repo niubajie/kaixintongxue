@@ -867,6 +867,7 @@ export interface ComputerStatus {
   cpuTempC: number | null;
   diskFreeGb: number;
   diskTotalGb: number;
+  diskName: string;
   memFreeGb: number;
   memTotalGb: number;
   online: boolean;

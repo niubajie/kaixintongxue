@@ -18,6 +18,7 @@ type App struct {
 	downloadDir string
 	logDir      string
 	authDir     string
+	dataDir     string
 	deploy      deployer
 	store       *Store
 }
@@ -50,6 +51,7 @@ func main() {
 		logDir:      filepath.Join(root, "logs"),
 		authDir:     filepath.Join(root, "auth"),
 	}
+	app.dataDir = filepath.Join(root, "data")
 	for _, dir := range []string{app.runtimeRoot, app.downloadDir, app.logDir, app.authDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			log.Fatalf("创建目录失败 %s: %v", dir, err)
@@ -61,6 +63,7 @@ func main() {
 	dataDir := filepath.Join(root, "data")
 	if custom := os.Getenv("KAIXIN_DATA_DIR"); custom != "" {
 		dataDir = custom
+		app.dataDir = custom
 	}
 	store, err := OpenStore(dataDir)
 	if err != nil {
