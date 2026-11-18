@@ -546,3 +546,57 @@ tbody tr:last-child td {
   margin-top: 18px;
 }
 
+/* ---------- 管理后台左侧竖排导航 ---------- */
+.admin-layout {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  margin-bottom: 40px;
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f2f4f9;
+  padding: 8px;
+  border-radius: 12px;
+  position: sticky;
+  top: 84px;
+}
+
+.admin-nav button {
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-nav button:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.admin-nav button.active {
+  background: #fff;
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(20, 22, 31, 0.08);
+}
+
+@media (max-width: 760px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+  }
+}

@@ -127,20 +127,21 @@ export function App() {
           <p>用户、技能、版本、资料、计费与自主优化统一管理；技能与版本改动会同步到客户端清单与下载中心。</p>
         </div>
 
-        <div className="tabs">
-          {TABS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={tab === item.key ? "active" : ""}
-              onClick={() => setTab(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <div className="admin-layout">
+          <aside className="admin-nav">
+            {TABS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={tab === item.key ? "active" : ""}
+                onClick={() => setTab(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </aside>
 
-        <div className="tab-body">
+          <div className="tab-body">
           {tab === "users" && <UsersPanel notify={notify} selfId={profile.id} />}
           {tab === "admins" && <AdminUsersPanel notify={notify} selfId={profile.id} />}
           {tab === "skills" && <SkillsPanel skills={skills} reload={loadSkills} notify={notify} />}
@@ -148,7 +149,8 @@ export function App() {
           {tab === "notes" && <NotesPanel notify={notify} />}
           {tab === "materials" && <MaterialsPanel notify={notify} />}
           {tab === "billing" && <BillingPanel notify={notify} />}
-          {tab === "optimizations" && <OptimizationsPanel notify={notify} />}
+            {tab === "optimizations" && <OptimizationsPanel notify={notify} />}
+          </div>
         </div>
       </main>
 
