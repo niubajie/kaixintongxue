@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ModelSelector } from "../components/ModelSelector";
 import { AI_MODELS, type AiModelOption } from "../data";
 import { bridge } from "../platform";
-import { fetchASRStatus, sendChat, transcribeAudio, type ChatResult } from "../deployApi";
+import { fetchASRStatus, streamChat, transcribeAudio, type ChatResult } from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
@@ -257,23 +257,56 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
       return;
     }
 
-    const nextMessages = [...messages, { role: "user" as const, content: text }];
-    setMessages(nextMessages);
+    const history = [...messages, { role: "user" as const, content: text }];
+    // 先放一条空的助手消息，边生成边填内容（流式）
+    const withPlaceholder = [...history, { role: "assistant" as const, content: "" }];
+    setMessages(withPlaceholder);
     setInput("");
     setSending(true);
     setLastResult(null);
+    setAttachments([]);
+
+    const appendDelta = (delta: string) => {
+      setMessages((current) => {
+        const next = [...current];
+        const last = next[next.length - 1];
+        if (last && last.role === "assistant") {
+          next[next.length - 1] = { ...last, content: last.content + delta };
+        }
+        return next;
+      });
+    };
+
     try {
-      const result = await sendChat(nextMessages);
-      setMessages([...nextMessages, { role: "assistant", content: result.text }]);
-      setLastResult(result);
-      onNotice(`已由 ${result.model} 回答，耗时 ${(result.elapsedMs / 1000).toFixed(1)} 秒。`);
+      await streamChat(
+        history,
+        appendDelta,
+        (meta) => {
+          setLastResult({
+            text: "",
+            model: meta.model,
+            promptTokens: meta.promptTokens,
+            completionTokens: meta.completionTokens,
+            costCents: meta.costCents,
+            elapsedMs: meta.elapsedMs,
+            note: meta.estimated ? "token 为估算值（模型未返回用量）" : ""
+          });
+          onNotice(`已由 ${meta.model} 回答，耗时 ${(meta.elapsedMs / 1000).toFixed(1)} 秒。`);
+        }
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "调用模型失败";
-      setMessages([...nextMessages, { role: "assistant", content: `（调用失败）${message}` }]);
+      setMessages((current) => {
+        const next = [...current];
+        const last = next[next.length - 1];
+        if (last && last.role === "assistant" && !last.content) {
+          next[next.length - 1] = { ...last, content: `（调用失败）${message}` };
+        }
+        return next;
+      });
       onNotice(message);
     } finally {
       setSending(false);
-      setAttachments([]);
     }
   };
 
@@ -414,7 +447,7 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
                 <div className="chat-text">{message.content}</div>
               </div>
             ))}
-            {sending && <p className="caption">正在生成…</p>}
+            {sending && <p className="caption">正在生成…（内容会边生成边显示）</p>}
             {lastResult && (
               <p className="caption chat-meta">
                 模型 {lastResult.model} · 输入 {lastResult.promptTokens} / 输出 {lastResult.completionTokens} tokens ·

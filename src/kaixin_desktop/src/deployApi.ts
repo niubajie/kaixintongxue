@@ -1023,3 +1023,65 @@ export async function fetchUsage(): Promise<UsageItem[]> {
   const payload = (await response.json()) as { items?: UsageItem[] };
   return payload.items ?? [];
 }
+
+
+export interface StreamMeta {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  costCents: number;
+  elapsedMs: number;
+  estimated?: boolean;
+}
+
+/** 流式对话：每收到一段文字就回调一次，结束后回调用量信息。 */
+export async function streamChat(
+  messages: { role: string; content: string }[],
+  onDelta: (text: string) => void,
+  onDone?: (meta: StreamMeta) => void
+): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({ messages })
+  });
+  if (!response.ok || !response.body) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `调用失败（HTTP ${response.status}）`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      const line = part.trim();
+      if (!line.startsWith("data:")) {
+        continue;
+      }
+      const payload = JSON.parse(line.slice(5).trim()) as {
+        delta?: string;
+        done?: boolean;
+        error?: string;
+      } & StreamMeta;
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      if (payload.delta) {
+        onDelta(payload.delta);
+      }
+      if (payload.done && onDone) {
+        onDone(payload);
+      }
+    }
+  }
+}
