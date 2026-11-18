@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ComputerStatusBar } from "./components/ComputerStatusBar";
 import { HomePage } from "./pages/HomePage";
 import { ApplicationPage } from "./pages/ApplicationPage";
 import { GoalPage } from "./pages/GoalPage";
@@ -118,6 +119,7 @@ export default function App() {
           {DEMO_MODE && <span className="demo-badge">页面演示模式</span>}
         </div>
         <div className="titlebar-right">
+          <ComputerStatusBar />
           <button
             type="button"
             className="window-btn"

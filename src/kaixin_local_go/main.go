@@ -114,6 +114,7 @@ func main() {
 	mux.HandleFunc("POST /api/kb/rollback", app.handleKBRollback)
 	mux.HandleFunc("GET /api/asr/status", app.handleASRStatus)
 	mux.HandleFunc("POST /api/asr/transcribe", app.handleASRTranscribe)
+	mux.HandleFunc("GET /api/system/status", app.handleComputerStatus)
 	mux.HandleFunc("GET /api/system/autostart", app.handleAutostartGet)
 	mux.HandleFunc("POST /api/system/autostart", app.handleAutostartSet)
 	mux.HandleFunc("GET /api/server/config", app.handleServerConfigGet)

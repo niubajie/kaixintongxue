@@ -859,3 +859,26 @@ export async function installUpdate(path: string): Promise<void> {
     throw new Error(payload?.message ?? `启动安装包失败（HTTP ${response.status}）`);
   }
 }
+
+
+// ---------- 电脑检测（FR-GLB-07） ----------
+
+export interface ComputerStatus {
+  cpuTempC: number | null;
+  diskFreeGb: number;
+  diskTotalGb: number;
+  memFreeGb: number;
+  memTotalGb: number;
+  online: boolean;
+  cpuTempNote: string;
+  checkedAt: string;
+}
+
+export async function fetchComputerStatus(): Promise<ComputerStatus> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/system/status`);
+  if (!response.ok) {
+    throw new Error(`读取电脑状态失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as ComputerStatus;
+}
