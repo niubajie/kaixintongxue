@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ModelSelector } from "../components/ModelSelector";
 import { AI_MODELS, type AiModelOption } from "../data";
 import { bridge } from "../platform";
-import { fetchASRStatus, streamChat, transcribeAudio, type ChatResult } from "../deployApi";
+import { fetchASRStatus, streamChat, summarizeChat, transcribeAudio, type ChatResult } from "../deployApi";
 
 interface Props {
   onNotice: (message: string) => void;
@@ -67,7 +67,8 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
 
   const [attachments, setAttachments] = useState<string[]>([]);
   const [pendingMaterials, setPendingMaterials] = useState<PendingMaterial[]>([]);
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: "user" | "assistant" | "system"; content: string }[]>([]);
+  const [compressing, setCompressing] = useState(false);
   const [sending, setSending] = useState(false);
   const [lastResult, setLastResult] = useState<ChatResult | null>(null);
   const [recording, setRecording] = useState(false);
@@ -277,10 +278,14 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
       });
     };
 
+    let fullText = "";
     try {
       await streamChat(
         history,
-        appendDelta,
+        (delta) => {
+          fullText += delta;
+          appendDelta(delta);
+        },
         (meta) => {
           setLastResult({
             text: "",
@@ -307,6 +312,40 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
       onNotice(message);
     } finally {
       setSending(false);
+    }
+
+    // 对话超过 7 轮就把早期部分压成摘要，避免越长越慢
+    const finished = [...history, { role: "assistant" as const, content: fullText }];
+    void compressContext(finished);
+  };
+
+  // compressContext 把前一半对话换成一条摘要，保留最近 8 条
+  const compressContext = async (list: { role: string; content: string }[]) => {
+    if (list.length < 14) {
+      return;
+    }
+    const keep = 8;
+    const older = list.slice(0, list.length - keep);
+    const recent = list.slice(list.length - keep);
+    // 已经压缩过一次就不再重复压缩同一段
+    if (list[0]?.role === "system") {
+      return;
+    }
+    setCompressing(true);
+    try {
+      const result = await summarizeChat(older);
+      setMessages([
+        { role: "system", content: `（更早对话摘要）${result.summary}` },
+        ...recent.map((item) => ({
+          role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content: item.content
+        }))
+      ]);
+      onNotice(`已把早期 ${older.length} 条对话压缩成摘要（${result.model}）。`);
+    } catch {
+      // 压缩失败不影响继续聊，后端还有滑动窗口兜底
+    } finally {
+      setCompressing(false);
     }
   };
 
@@ -442,12 +481,27 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
         {(messages.length > 0 || sending) && (
           <div className="chat-log">
             {messages.map((message, index) => (
-              <div key={index} className={`chat-msg ${message.role}`}>
-                <span className="chat-role">{message.role === "user" ? "我" : "AI"}</span>
+              <div key={index} className={`chat-msg ${message.role === "system" ? "system" : message.role}`}>
+                <span className="chat-role">{message.role === "user" ? "我" : message.role === "system" ? "摘要" : "AI"}</span>
                 <div className="chat-text">{message.content}</div>
               </div>
             ))}
             {sending && <p className="caption">正在生成…（内容会边生成边显示）</p>}
+            {compressing && <p className="caption">正在压缩早期对话…</p>}
+            <div className="row" style={{ gap: 8, alignItems: "center" }}>
+              <span className="caption">上下文 {messages.length} 条</span>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  setMessages([]);
+                  setLastResult(null);
+                  onNotice("已清空对话。");
+                }}
+              >
+                清空对话
+              </button>
+            </div>
             {lastResult && (
               <p className="caption chat-meta">
                 模型 {lastResult.model} · 输入 {lastResult.promptTokens} / 输出 {lastResult.completionTokens} tokens ·

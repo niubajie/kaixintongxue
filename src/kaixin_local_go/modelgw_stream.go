@@ -37,7 +37,7 @@ func (a *App) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
-	cleaned := cleanMessages(body.Messages)
+	cleaned := trimMessages(cleanMessages(body.Messages))
 	if len(cleaned) == 0 {
 		fail(w, http.StatusBadRequest, "请先输入内容")
 		return

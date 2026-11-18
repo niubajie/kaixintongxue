@@ -1098,3 +1098,27 @@ export async function generatePlanByModel(
     elapsedMs: payload.elapsedMs ?? 0
   };
 }
+
+
+/** 把早期对话压成摘要，用于上下文压缩。 */
+export async function summarizeChat(
+  messages: { role: string; content: string }[]
+): Promise<{ summary: string; model: string; elapsedMs: number }> {
+  const base = BASE;
+  const response = await fetch(`${base}/api/chat/summarize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages })
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { summary?: string; model?: string; elapsedMs?: number; message?: string }
+    | null;
+  if (!response.ok || !payload?.summary) {
+    throw new Error(payload?.message ?? `压缩失败（HTTP ${response.status}）`);
+  }
+  return {
+    summary: payload.summary,
+    model: payload.model ?? "",
+    elapsedMs: payload.elapsedMs ?? 0
+  };
+}

@@ -282,17 +282,7 @@ func (a *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
-	cleaned := make([]ChatMessage, 0, len(body.Messages))
-	for _, msg := range body.Messages {
-		role := strings.TrimSpace(msg.Role)
-		if role != "user" && role != "assistant" && role != "system" {
-			continue
-		}
-		if strings.TrimSpace(msg.Content) == "" {
-			continue
-		}
-		cleaned = append(cleaned, ChatMessage{Role: role, Content: msg.Content})
-	}
+	cleaned := trimMessages(cleanMessages(body.Messages))
 	if len(cleaned) == 0 {
 		fail(w, http.StatusBadRequest, "请先输入内容")
 		return

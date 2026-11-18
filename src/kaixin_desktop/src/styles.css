@@ -1495,3 +1495,15 @@ input[type="range"] {
 .chat-meta {
   margin-top: 4px;
 }
+
+/* 摘要消息用灰底，和普通回答区分开 */
+.chat-msg.system .chat-role {
+  background: #f0f2f7;
+  color: var(--text-soft);
+}
+
+.chat-msg.system .chat-text {
+  background: #f7f8fb;
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
