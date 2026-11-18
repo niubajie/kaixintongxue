@@ -15,7 +15,10 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: "users", label: "用户管理" },
   { key: "skills", label: "技能管理" },
   { key: "versions", label: "版本管理" },
-  { key: "notes", label: "升级说明" }
+  { key: "notes", label: "升级说明" },
+  { key: "materials", label: "资料管理" },
+  { key: "billing", label: "充值与价格" },
+  { key: "optimizations", label: "自主优化" }
 ];
 
 export function App() {
@@ -119,7 +122,7 @@ export function App() {
       <main className="container">
         <div className="page-head">
           <h1>管理后台</h1>
-          <p>注册用户管理、技能管理与版本管理三块合一。技能与版本改动会同步到客户端技能清单与下载中心。</p>
+          <p>用户、技能、版本、资料、计费与自主优化统一管理；技能与版本改动会同步到客户端清单与下载中心。</p>
         </div>
 
         <div className="tabs">
