@@ -795,3 +795,67 @@ export async function signOut(): Promise<void> {
   const base = await getBaseUrl();
   await fetch(`${base}/api/account/logout`, { method: "POST" });
 }
+
+
+// ---------- 检查更新与下载安装（UPD-02 / UPD-03） ----------
+
+export interface UpdateAvailability {
+  configured: boolean;
+  available: boolean;
+  current: string;
+  latest: string;
+  fileName: string;
+  sizeBytes: number;
+  sha256: string;
+  notes: string;
+  message: string;
+}
+
+export interface UpdateDownloadResult {
+  ok: boolean;
+  path: string;
+  fileName: string;
+  sizeBytes: number;
+  verified: boolean;
+  message: string;
+}
+
+export async function fetchUpdateAvailable(current: string): Promise<UpdateAvailability> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/update/available?current=${encodeURIComponent(current)}`);
+  if (!response.ok) {
+    throw new Error(`检查更新失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as UpdateAvailability;
+}
+
+export async function downloadUpdate(
+  version: string,
+  fileName: string,
+  sha256: string
+): Promise<UpdateDownloadResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/update/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version, fileName, sha256 })
+  });
+  const payload = (await response.json().catch(() => null)) as (UpdateDownloadResult & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `下载失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function installUpdate(path: string): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/update/install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `启动安装包失败（HTTP ${response.status}）`);
+  }
+}

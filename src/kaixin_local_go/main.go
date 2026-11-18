@@ -31,11 +31,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
-	base := os.Getenv("LOCALAPPDATA")
-	if base == "" {
-		base = "."
+	// KAIXIN_HOME 可整体改运行目录，便于排障与测试
+	root := ""
+	if custom := os.Getenv("KAIXIN_HOME"); custom != "" {
+		root = custom
+	} else {
+		base := os.Getenv("LOCALAPPDATA")
+		if base == "" {
+			base = "."
+		}
+		root = filepath.Join(base, "Kaixin")
 	}
-	root := filepath.Join(base, "Kaixin")
 	app := &App{
 		catalog:     catalog,
 		sites:       sites,
@@ -114,6 +120,9 @@ func main() {
 	mux.HandleFunc("POST /api/server/config", app.handleServerConfigSet)
 	mux.HandleFunc("POST /api/server/test", app.handleServerTest)
 	mux.HandleFunc("POST /api/update/check", app.handleUpdateCheck)
+	mux.HandleFunc("GET /api/update/available", app.handleUpdateAvailable)
+	mux.HandleFunc("POST /api/update/download", app.handleUpdateDownload)
+	mux.HandleFunc("POST /api/update/install", app.handleUpdateInstall)
 	mux.HandleFunc("POST /api/account/login", app.handleAccountLogin)
 	mux.HandleFunc("GET /api/account/me", app.handleAccountMe)
 	mux.HandleFunc("POST /api/account/logout", app.handleAccountLogout)

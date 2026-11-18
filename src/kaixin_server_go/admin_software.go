@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -239,4 +240,48 @@ func (a *App) handleNextVersion(w http.ResponseWriter, r *http.Request) {
 		next = bumpVersion(versions[0].Version)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"version": next})
+}
+
+// handleVersionDelete 删除误发布的版本。
+// 当前版本被删后不再有 current，客户端会看到「尚未发布」，不会拿到坏包。
+func (a *App) handleVersionDelete(w http.ResponseWriter, r *http.Request) {
+	admin, ok := a.requireLogin(w, r, "admin.software.version.delete")
+	if !ok {
+		return
+	}
+	if !canEditCatalog(admin) {
+		a.denyWithAudit(w, r, admin, "admin.software.version.delete", "", reasonNotAdmin)
+		return
+	}
+	softwareID, valid := parseInt64(r.PathValue("id"))
+	if !valid {
+		fail(w, http.StatusBadRequest, "技能不存在。")
+		return
+	}
+	version := strings.TrimSpace(r.PathValue("version"))
+	if version == "" {
+		fail(w, http.StatusBadRequest, "缺少版本号。")
+		return
+	}
+
+	ctx := r.Context()
+	var versionID int64
+	var filePath string
+	err := a.db.QueryRow(ctx,
+		`SELECT id, file_path FROM software_versions WHERE software_id = $1 AND version = $2`,
+		softwareID, version).Scan(&versionID, &filePath)
+	if err != nil {
+		fail(w, http.StatusNotFound, "找不到该版本。")
+		return
+	}
+
+	if _, err := a.db.Exec(ctx, `DELETE FROM software_versions WHERE id = $1`, versionID); err != nil {
+		fail(w, http.StatusInternalServerError, "删除版本失败。")
+		return
+	}
+	if filePath != "" {
+		_ = os.Remove(filePath)
+	}
+	a.audit(ctx, admin.Account, "version_delete", fmt.Sprintf("software=%d version=%s", softwareID, version))
+	writeMessage(w, http.StatusOK, "已删除版本 "+version+"。")
 }

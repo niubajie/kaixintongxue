@@ -83,6 +83,8 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/software", a.handleSoftwareList)
 	mux.HandleFunc("GET /api/skills/packages", a.handleSkillPackages)
 	mux.HandleFunc("GET /api/version-notes", a.handleNotesList)
+	mux.HandleFunc("GET /api/client/latest", a.handleClientLatest)
+	mux.HandleFunc("GET /api/client/download", a.handleClientDownload)
 
 	mux.HandleFunc("GET /api/admin/users", a.handleAdminUsers)
 	mux.HandleFunc("POST /api/admin/users/{id}/role", a.handleUserRole)
@@ -101,6 +103,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/software/{id}/publish", a.handlePublish)
 	mux.HandleFunc("POST /api/admin/software/{id}/versions/{version}/confirm", a.handleConfirmVersion)
 	mux.HandleFunc("POST /api/admin/software/{id}/rollback", a.handleRollback)
+	mux.HandleFunc("DELETE /api/admin/software/{id}/versions/{version}", a.handleVersionDelete)
 	mux.HandleFunc("POST /api/admin/software/{id}/scan", a.handleRescan)
 	mux.HandleFunc("GET /api/admin/software/{id}/history", a.handleHistory)
 	mux.HandleFunc("POST /api/admin/version-notes", a.handleNoteCreate)
