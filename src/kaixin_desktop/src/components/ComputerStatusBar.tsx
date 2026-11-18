@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { fetchComputerStatus, type ComputerStatus } from "../deployApi";
 
-// FR-GLB-07：窗口右上角显示 CPU 温度、硬盘剩余、内存剩余、联网状态。
-// 15 秒刷新一次；任一项读不到就显示「—」并给出原因，不编造数字。
+// FR-GLB-07：窗口右上角显示硬盘剩余、内存剩余、联网状态。
+// 不显示温度——读 CPU 温度需要内核驱动与管理员授权，本应用走免管理员路线。
+// 15 秒刷新一次。
 
 function formatGb(value: number): string {
   if (!value || value <= 0) {
@@ -54,20 +55,8 @@ export function ComputerStatusBar() {
     );
   }
 
-  const tempText = status.cpuTempC === null ? "—" : `${status.cpuTempC.toFixed(0)}°C`;
-
   return (
     <span className="computer-status">
-      <span
-        className="computer-status-item"
-        title={
-          status.cpuTempC === null
-            ? `CPU 温度：${status.cpuTempNote}。安装 LibreHardwareMonitor 后本应用会自动读取真实温度。`
-            : `CPU 温度：${status.cpuTempNote}`
-        }
-      >
-        CPU 温度 {tempText}
-      </span>
       <span
         className="computer-status-item"
         title={`数据目录所在盘 ${status.diskName || "?"}：可用 ${status.diskFreeGb.toFixed(1)} GB / 共 ${status.diskTotalGb.toFixed(0)} GB`}

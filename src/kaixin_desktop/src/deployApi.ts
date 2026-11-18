@@ -864,14 +864,12 @@ export async function installUpdate(path: string): Promise<void> {
 // ---------- 电脑检测（FR-GLB-07） ----------
 
 export interface ComputerStatus {
-  cpuTempC: number | null;
   diskFreeGb: number;
   diskTotalGb: number;
   diskName: string;
   memFreeGb: number;
   memTotalGb: number;
   online: boolean;
-  cpuTempNote: string;
   checkedAt: string;
 }
 
