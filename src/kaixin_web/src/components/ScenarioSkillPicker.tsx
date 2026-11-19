@@ -210,6 +210,7 @@ export function ScenarioSkillPicker({
   // L2「编辑」弹窗：列出全部技能细分与依赖，底部可跑 AI 技能匹配
   const [editOpen, setEditOpen] = useState(false);
   const [draftText, setDraftText] = useState("");
+  const [initialText, setInitialText] = useState("");
   const [matching, setMatching] = useState(false);
   // 内置场景的编辑结果存本地（Excel 是只读数据源）
   const [skillOverrides, setSkillOverrides] = useState<
@@ -517,7 +518,9 @@ export function ScenarioSkillPicker({
   };
 
   const openEditDialog = () => {
-    setDraftText(activeSkills.map((skill) => skill.desc || skill.name).join("\n"));
+    const text = activeSkills.map((skill) => skill.desc || skill.name).join("\n");
+    setDraftText(text);
+    setInitialText(text);
     setMatchLines([]);
     setEditOpen(true);
   };
@@ -573,6 +576,32 @@ export function ScenarioSkillPicker({
           }}
         />
 
+        <div className="row" style={{ marginTop: 6 }}>
+          <span
+            role="button"
+            className="caption"
+            style={{ color: "var(--accent)", cursor: "pointer" }}
+            onClick={() => {
+              if (activeCustom) {
+                return;
+              }
+              const key = scenarioKey(activeCategory, activeScenario);
+              setSkillOverrides((current) => {
+                const next = { ...current };
+                delete next[key];
+                return next;
+              });
+              const original = (currentScenario?.skills ?? []).map((skill) => skill.desc || skill.name).join("\n");
+              setDraftText(original);
+              setInitialText(original);
+              setMatchLines([]);
+              onNotice("已恢复默认内容，点「保存」生效。");
+            }}
+          >
+            恢复默认内容
+          </span>
+        </div>
+
         {matchLines.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <span className="caption">AI 技能匹配结果：</span>
@@ -590,12 +619,21 @@ export function ScenarioSkillPicker({
           </div>
         )}
 
-        <div className="row" style={{ marginTop: 16, gap: 8 }}>
-          <button type="button" className="primary-btn" onClick={saveEdits}>
-            保存
-          </button>
+        <div
+          className="row"
+          style={{ marginTop: 16, justifyContent: "space-between", alignItems: "center" }}
+        >
           <button type="button" className="secondary-btn" onClick={() => void runSkillMatch()} disabled={matching}>
             {matching ? "匹配中…" : "AI 技能匹配"}
+          </button>
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={saveEdits}
+            disabled={draftText === initialText}
+            title={draftText === initialText ? "内容没有改动" : "保存修改"}
+          >
+            保存
           </button>
           <button type="button" className="ghost-btn" onClick={() => setEditOpen(false)}>
             关闭

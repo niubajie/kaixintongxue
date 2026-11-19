@@ -1849,3 +1849,11 @@ input[type="range"] {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* 禁用状态的主按钮：变灰、不可点 */
+.primary-btn:disabled {
+  background: #c9d1cb;
+  color: #f3f5f3;
+  cursor: not-allowed;
+  box-shadow: none;
+}
