@@ -1872,20 +1872,28 @@ input[type="range"] {
 .edit-lines {
   border: 1px solid #d7dae0;
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px;
   margin-top: 10px;
   min-height: 200px;
   max-height: 46vh;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  background: #fff;
 }
 
 .edit-line {
   display: flex;
   align-items: center;
   gap: 10px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.edit-line:nth-child(even) {
+  background: #f1f4f8;
 }
 
 .edit-line-input {
