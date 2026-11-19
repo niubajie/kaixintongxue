@@ -811,7 +811,7 @@ export function SkillsPage({ onNotice }: Props) {
             </button>
             <button
               type="button"
-              className="ghost-btn"
+              className="secondary-btn"
               onClick={() => {
                 setPlan(null);
                 onNotice("已关闭部署方案。");
