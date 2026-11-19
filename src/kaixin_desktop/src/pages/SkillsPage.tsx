@@ -809,6 +809,16 @@ export function SkillsPage({ onNotice }: Props) {
             <button type="button" className="secondary-btn" onClick={() => void generate()} disabled={planning}>
               重新生成
             </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                setPlan(null);
+                onNotice("已关闭部署方案。");
+              }}
+            >
+              关闭
+            </button>
           </div>
         </div>
       )}
