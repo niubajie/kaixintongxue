@@ -131,6 +131,14 @@ function loadScope(): ScopeState {
   }
 }
 
+/** 去掉纯括号行（[软件][网站]），这些只是匹配结果，不参与保存 */
+function stripBrackets(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !/^(\s*\[[^\]]*\])+\s*$/.test(line))
+    .join("\n");
+}
+
 const STATUS_CLASS: Record<DependencyStatus, string> = {
   已就绪: "dep-ok",
   待接入: "dep-warn",
@@ -226,7 +234,29 @@ export function ScenarioSkillPicker({
   useEffect(() => {
     localStorage.setItem("kaixin.skillOverrides.v1", JSON.stringify(skillOverrides));
   }, [skillOverrides]);
-  const [matchLines, setMatchLines] = useState<{ text: string; software?: string; site?: string }[]>([]);
+
+  // 右键菜单：点空白处、滚动、按 Esc 都要收起
+  useEffect(() => {
+    if (!cardMenu) {
+      return;
+    }
+    const closeMenu = () => setCardMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("contextmenu", closeMenu);
+    window.addEventListener("wheel", closeMenu, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("contextmenu", closeMenu);
+      window.removeEventListener("wheel", closeMenu);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [cardMenu]);
 
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: "scenario"; category: string; scenario: string; label: string }
@@ -499,14 +529,23 @@ export function ScenarioSkillPicker({
     }
     setMatching(true);
     try {
-      const content = draftText.trim();
+      const content = stripBrackets(draftText).trim();
       const result = await matchSoftware(content);
-      const lines = (result.lines ?? []).map((line) => ({
-        text: line.text,
-        software: line.software,
-        site: line.site
-      }));
-      setMatchLines(lines);
+      const lines = result.lines ?? [];
+      // 把 [软件][网站] 直接写回输入框，每条要求下面跟一行，页面不再增高
+      const next = content
+        .split("\n")
+        .map((raw) => raw.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const hit = lines.find((item) => item.text.trim() === line);
+          const bracket = hit
+            ? `[${hit.software ?? "无软件"}]${hit.site ? `[${hit.site}]` : ""}`
+            : "[无软件]";
+          return `${line}\n${bracket}`;
+        })
+        .join("\n");
+      setDraftText(next);
       if (lines.length === 0) {
         onNotice("没有匹配到软件，可到依赖页手动导入。");
       }
@@ -521,12 +560,14 @@ export function ScenarioSkillPicker({
     const text = activeSkills.map((skill) => skill.desc || skill.name).join("\n");
     setDraftText(text);
     setInitialText(text);
-    setMatchLines([]);
     setEditOpen(true);
   };
 
   const saveEdits = () => {
-    const cleaned = draftText.split("\n").map((line) => line.trim()).filter(Boolean);
+    const cleaned = stripBrackets(draftText)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
     if (activeCustom) {
       onUpdateCustomContent?.(activeCustom.id, cleaned.join("\\n"));
       setEditOpen(false);
@@ -572,8 +613,7 @@ export function ScenarioSkillPicker({
           placeholder={"采集规格、价格与供应商信息。\n汇总竞品销量与评价趋势。"}
           onChange={(event) => {
             setDraftText(event.target.value);
-            setMatchLines([]);
-          }}
+                  }}
         />
 
         <div className="row" style={{ marginTop: 6 }}>
@@ -594,27 +634,12 @@ export function ScenarioSkillPicker({
               const original = (currentScenario?.skills ?? []).map((skill) => skill.desc || skill.name).join("\n");
               setDraftText(original);
               setInitialText(original);
-              setMatchLines([]);
-              onNotice("已恢复默认内容，点「保存」生效。");
+                        onNotice("已恢复默认内容，点「保存」生效。");
             }}
           >
             恢复默认内容
           </span>
         </div>
-
-        {matchLines.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            {matchLines.map((line, index) => (
-              <div key={`match-${index}`} style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 13, lineHeight: 1.6 }}>{line.text}</div>
-                <div style={{ fontSize: 12, color: "#0f7b6c", fontWeight: 600, marginTop: 2 }}>
-                  [{line.software ?? "无软件"}]
-                  {line.site ? `[${line.site}]` : ""}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
         <div
           className="row"
@@ -690,6 +715,7 @@ export function ScenarioSkillPicker({
                       onDoubleClick={() => runDoubleClick(() => goLevel2(category.name, scenario.name))}
                       onContextMenu={(event) => {
                         event.preventDefault();
+                        event.stopPropagation();
                         setCardMenu({
                           x: event.clientX,
                           y: event.clientY,
@@ -741,6 +767,7 @@ export function ScenarioSkillPicker({
                       }
                       onContextMenu={(event) => {
                         event.preventDefault();
+                        event.stopPropagation();
                         setCardMenu({
                           x: event.clientX,
                           y: event.clientY,
@@ -921,6 +948,7 @@ export function ScenarioSkillPicker({
                   onDoubleClick={() => goLevel3(skill.name)}
                   onContextMenu={(event) => {
                     event.preventDefault();
+                    event.stopPropagation();
                     setCardMenu({
                       x: event.clientX,
                       y: event.clientY,
