@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "./ConfirmDialog";
 import {
   DEPENDENCY_STATUSES,
   DEPENDENCY_TYPES,
@@ -42,6 +43,8 @@ interface Props {
   selectedCustom?: string[];
   onToggleCustom?: (id: string) => void;
   onEditCustom?: (id: string) => void;
+  /** 右键删除自建技能 */
+  onDeleteCustom?: (id: string) => void;
 }
 
 interface ScopeState {
@@ -92,13 +95,82 @@ export function ScenarioSkillPicker({
   customSkills = [],
   selectedCustom = [],
   onToggleCustom,
-  onEditCustom
+  onEditCustom,
+  onDeleteCustom
 }: Props) {
   const [scope, setScope] = useState<ScopeState>(() => loadScope());
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [activeCategory, setActiveCategory] = useState("");
   const [activeScenario, setActiveScenario] = useState("");
   const [activeSkill, setActiveSkill] = useState("");
+
+  // 右键删除：自建技能真删；业务场景与细分技能是内置数据，只做「本地隐藏」
+  const [hiddenScenarios, setHiddenScenarios] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("kaixin.hiddenScenarios.v1") ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+  const [hiddenSkills, setHiddenSkills] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("kaixin.hiddenSkills.v1") ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("kaixin.hiddenScenarios.v1", JSON.stringify(hiddenScenarios));
+  }, [hiddenScenarios]);
+
+  useEffect(() => {
+    localStorage.setItem("kaixin.hiddenSkills.v1", JSON.stringify(hiddenSkills));
+  }, [hiddenSkills]);
+
+  // 右键 → 应用内确认框（Tauri 的 window.confirm 部分环境不弹，统一用组件）
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "scenario"; category: string; scenario: string; label: string }
+    | { kind: "skill"; category: string; scenario: string; skill: string; label: string }
+    | { kind: "custom"; id: string; label: string }
+    | null
+  >(null);
+
+  const performDelete = () => {
+    const target = pendingDelete;
+    if (!target) {
+      return;
+    }
+    if (target.kind === "scenario") {
+      const key = scenarioKey(target.category, target.scenario);
+      setHiddenScenarios((current) => [...current, key]);
+      setScope((current) => ({
+        ...current,
+        selected: current.selected.filter((item) => item !== key)
+      }));
+      onNotice(`已删除「${target.label}」，可在列表下方恢复。`);
+    } else if (target.kind === "skill") {
+      setHiddenSkills((current) => [...current, skillKey(target.category, target.scenario, target.skill)]);
+      onNotice(`已删除「${target.label}」，可在列表下方恢复。`);
+    } else {
+      onDeleteCustom?.(target.id);
+    }
+    setPendingDelete(null);
+  };
+
+  const confirmNode = (
+    <ConfirmDialog
+      open={pendingDelete !== null}
+      title={pendingDelete ? `删除「${pendingDelete.label}」？` : ""}
+      detail={
+        pendingDelete?.kind === "custom"
+          ? "将同时从本地库删除，删除后不可恢复。"
+          : "删除后不再显示在列表中，可在列表下方「恢复」找回。"
+      }
+      onCancel={() => setPendingDelete(null)}
+      onConfirm={performDelete}
+    />
+  );
 
   const [depForm, setDepForm] = useState<{
     mode: "add" | "edit";
@@ -263,6 +335,7 @@ export function ScenarioSkillPicker({
   if (level === 1) {
     return (
       <section className="scope-box">
+        {confirmNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">选择业务场景</h2>
           {action}
@@ -272,7 +345,8 @@ export function ScenarioSkillPicker({
           <section key={category.name} className="scope-group">
             <h3 className="scope-group-title">{category.name}</h3>
             <div className="scenario-grid">
-              {[...category.scenarios]
+              {category.scenarios
+                .filter((scenario) => !hiddenScenarios.includes(scenarioKey(category.name, scenario.name)))
                 .sort(
                   (left, right) =>
                     Number(scope.selected.includes(scenarioKey(category.name, right.name))) -
@@ -289,6 +363,15 @@ export function ScenarioSkillPicker({
                       role="button"
                       tabIndex={0}
                       onClick={() => toggleScenario(category.name, scenario.name)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setPendingDelete({
+                          kind: "scenario",
+                          category: category.name,
+                          scenario: scenario.name,
+                          label: scenario.name
+                        });
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
@@ -323,6 +406,22 @@ export function ScenarioSkillPicker({
           </section>
         ))}
 
+        {hiddenScenarios.length > 0 && (
+          <p className="caption" style={{ marginTop: 6 }}>
+            已隐藏 {hiddenScenarios.length} 个业务场景 ·{" "}
+            <span
+              role="button"
+              style={{ color: "var(--accent)", cursor: "pointer" }}
+              onClick={() => {
+                setHiddenScenarios([]);
+                onNotice("已恢复全部业务场景。");
+              }}
+            >
+              恢复
+            </span>
+          </p>
+        )}
+
         {customSkills.length > 0 && (
           <section className="scope-group">
             <h3 className="scope-group-title">自定义技能</h3>
@@ -336,6 +435,10 @@ export function ScenarioSkillPicker({
                     role="button"
                     tabIndex={0}
                     onClick={() => onToggleCustom?.(skill.id)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setPendingDelete({ kind: "custom", id: skill.id, label: skill.name });
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
@@ -378,6 +481,7 @@ export function ScenarioSkillPicker({
   if (level === 2 && currentScenario) {
     return (
       <section className="scope-box">
+        {confirmNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">技能细分 · {activeScenario}</h2>
           <button type="button" className="ghost-btn" onClick={backToLevel1}>
@@ -386,11 +490,26 @@ export function ScenarioSkillPicker({
         </div>
         <div className="scope-inner">
           <div className="skill-cards">
-            {currentScenario.skills.map((skill) => {
+            {currentScenario.skills
+              .filter((skill) => !hiddenSkills.includes(skillKey(activeCategory, activeScenario, skill.name)))
+              .map((skill) => {
               const deps = depsOfSkill(activeCategory, activeScenario, skill);
               const pending = deps.filter((dep) => dep.status !== "已就绪").length;
               return (
-                <div key={skill.name} className="scenario-card skill-card">
+                <div
+                  key={skill.name}
+                  className="scenario-card skill-card"
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setPendingDelete({
+                      kind: "skill",
+                      category: activeCategory,
+                      scenario: activeScenario,
+                      skill: skill.name,
+                      label: skill.name
+                    });
+                  }}
+                >
                   <div className="scenario-text">
                     <span className="scenario-name">{skill.name}</span>
                     <span className="scenario-meta">
@@ -406,8 +525,26 @@ export function ScenarioSkillPicker({
                   </button>
                 </div>
               );
-            })}
+              })}
           </div>
+          {hiddenSkills.filter((item) => item.startsWith(`${skillKey(activeCategory, activeScenario, "")}`)).length > 0 && (
+            <p className="caption" style={{ marginTop: 10 }}>
+              已隐藏该场景下{" "}
+              {hiddenSkills.filter((item) => item.startsWith(`${skillKey(activeCategory, activeScenario, "")}`)).length} 项技能 ·{" "}
+              <span
+                role="button"
+                style={{ color: "var(--accent)", cursor: "pointer" }}
+                onClick={() => {
+                  setHiddenSkills((current) =>
+                    current.filter((item) => !item.startsWith(`${skillKey(activeCategory, activeScenario, "")}`))
+                  );
+                  onNotice("已恢复该场景的细分技能。");
+                }}
+              >
+                恢复
+              </span>
+            </p>
+          )}
         </div>
         {footer && <div className="scope-supplement">{footer}</div>}
       </section>
@@ -419,6 +556,7 @@ export function ScenarioSkillPicker({
     const deps = depsOfSkill(activeCategory, activeScenario, currentSkill);
     return (
       <section className="scope-box">
+        {confirmNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">依赖 · {activeSkill}</h2>
           <button type="button" className="ghost-btn" onClick={backToLevel2}>

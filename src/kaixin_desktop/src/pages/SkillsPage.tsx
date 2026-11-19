@@ -26,7 +26,8 @@ import {
   type MatchReason,
   type PlanSiteAuth,
   type ResolveResult,
-  type SoftwareEntry
+  type SoftwareEntry,
+  deleteCustomSkill
 } from "../deployApi";
 
 
@@ -339,6 +340,24 @@ export function SkillsPage({ onNotice }: Props) {
       demand: skill.demand
     }));
 
+  // 右键删除自建技能：确认后先删本地库，再从列表移除
+  const removeCustomSkill = async (id: string) => {
+    const target = skills.find((item) => item.id === id);
+    if (!target) {
+      return;
+    }
+    try {
+      await deleteCustomSkill(id);
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "删除失败");
+      return;
+    }
+    setSkills((list) => list.filter((item) => item.id !== id));
+    setSelected((current) => current.filter((item) => item !== id));
+    setPlan(null);
+    onNotice(`已删除「${target.name}」。`);
+  };
+
   const toggleCustomSkill = (id: string) => {
     setPlan(null);
     setSelected((current) =>
@@ -613,6 +632,7 @@ export function SkillsPage({ onNotice }: Props) {
         selectedCustom={selected}
         onToggleCustom={toggleCustomSkill}
         onEditCustom={editCustomSkill}
+        onDeleteCustom={removeCustomSkill}
         action={
           <button type="button" className="ghost-btn" onClick={openCreate}>
             + 新增技能
