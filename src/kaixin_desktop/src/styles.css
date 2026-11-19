@@ -1918,3 +1918,26 @@ input[type="range"] {
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* 编辑页保存按钮：可点=山青色，不可点=灰色 */
+.save-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 9px 22px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #0f7b6c;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #0d6a5d;
+}
+
+.save-btn:disabled {
+  background: #e6e9e7;
+  color: #a9b2ac;
+  cursor: not-allowed;
+}

@@ -212,6 +212,7 @@ export function ScenarioSkillPicker({
   const [draftLines, setDraftLines] = useState<string[]>([]);
   const [initialLines, setInitialLines] = useState<string[]>([]);
   const [matches, setMatches] = useState<{ text: string; software?: string; site?: string }[]>([]);
+  const [hasMatched, setHasMatched] = useState(false);
   const [matching, setMatching] = useState(false);
   // 内置场景的编辑结果存本地（Excel 是只读数据源）
   const [skillOverrides, setSkillOverrides] = useState<
@@ -530,6 +531,7 @@ export function ScenarioSkillPicker({
         site: line.site
       }));
       setMatches(lines);
+      setHasMatched(true);
       if (lines.length === 0) {
         onNotice("没有匹配到软件，可到依赖页手动导入。");
       }
@@ -545,6 +547,7 @@ export function ScenarioSkillPicker({
     setDraftLines(lines);
     setInitialLines(lines);
     setMatches([]);
+    setHasMatched(false);
     setEditOpen(true);
   };
 
@@ -644,6 +647,7 @@ export function ScenarioSkillPicker({
               setDraftLines(original);
               setInitialLines(original);
               setMatches([]);
+              setHasMatched(false);
               onNotice("已恢复默认内容，点「保存」生效。");
             }}
           >
@@ -666,10 +670,10 @@ export function ScenarioSkillPicker({
           </button>
           <button
             type="button"
-            className="secondary-btn"
+            className="save-btn"
             style={{ minWidth: 120 }}
             onClick={saveEdits}
-            disabled={draftLines.join("\n") === initialLines.join("\n")}
+            disabled={!hasMatched && draftLines.join("\n") === initialLines.join("\n")}
           >
             保存
           </button>
