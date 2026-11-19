@@ -1700,8 +1700,8 @@ input[type="range"] {
 /* ---------- 选择业务场景：一个大框装三类，框外只留居中按钮 ---------- */
 .scope-box {
   background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: 1.5px solid #c3c7cf;
+  border-radius: 14px;
   padding: 20px 22px 18px;
   margin-top: 14px;
 }
@@ -1756,7 +1756,7 @@ input[type="range"] {
 
 /* L2/L3 里把列表再框一层，和 L1 的分类框呼应 */
 .scope-inner {
-  border: 1px solid var(--line);
+  border: 1px solid #d7dae0;
   border-radius: 12px;
   padding: 14px 16px;
   margin-top: 12px;
