@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
   DEPENDENCY_STATUSES,
@@ -176,6 +176,33 @@ export function ScenarioSkillPicker({
   }, [hiddenSkills]);
 
   // 右键 → 应用内确认框（Tauri 的 window.confirm 部分环境不弹，统一用组件）
+  // 右键菜单：只放「删除」一项，点它才弹确认框
+  const [cardMenu, setCardMenu] = useState<
+    | { x: number; y: number; kind: "scenario"; category: string; scenario: string; label: string }
+    | { x: number; y: number; kind: "skill"; category: string; scenario: string; skill: string; label: string }
+    | { x: number; y: number; kind: "custom"; id: string; label: string }
+    | null
+  >(null);
+
+  // 单击 = 选中，双击 = 进入下一层；用定时器区分，避免双击触发两次选中
+  const clickTimer = useRef<number | null>(null);
+  const runSingleClick = (action: () => void) => {
+    if (clickTimer.current) {
+      window.clearTimeout(clickTimer.current);
+    }
+    clickTimer.current = window.setTimeout(() => {
+      action();
+      clickTimer.current = null;
+    }, 220);
+  };
+  const runDoubleClick = (action: () => void) => {
+    if (clickTimer.current) {
+      window.clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    action();
+  };
+
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: "scenario"; category: string; scenario: string; label: string }
     | { kind: "skill"; category: string; scenario: string; skill: string; label: string }
@@ -204,6 +231,41 @@ export function ScenarioSkillPicker({
     }
     setPendingDelete(null);
   };
+
+  const menuNode = cardMenu ? (
+    <div
+      className="card-menu"
+      style={{ left: cardMenu.x, top: cardMenu.y }}
+      onMouseLeave={() => setCardMenu(null)}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (cardMenu.kind === "scenario") {
+            setPendingDelete({
+              kind: "scenario",
+              category: cardMenu.category,
+              scenario: cardMenu.scenario,
+              label: cardMenu.label
+            });
+          } else if (cardMenu.kind === "skill") {
+            setPendingDelete({
+              kind: "skill",
+              category: cardMenu.category,
+              scenario: cardMenu.scenario,
+              skill: cardMenu.skill,
+              label: cardMenu.label
+            });
+          } else {
+            setPendingDelete({ kind: "custom", id: cardMenu.id, label: cardMenu.label });
+          }
+          setCardMenu(null);
+        }}
+      >
+        删除
+      </button>
+    </div>
+  ) : null;
 
   const confirmNode = (
     <ConfirmDialog
@@ -392,8 +454,10 @@ export function ScenarioSkillPicker({
     return (
       <section className="scope-box">
         {confirmNode}
+        {menuNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">选择业务场景</h2>
+          <span className="caption">双击卡片进入细分技能 · 右键可删除</span>
           {action}
         </div>
         <div className="scope-groups">
@@ -418,10 +482,13 @@ export function ScenarioSkillPicker({
                       className={`scenario-card${active ? " selected" : ""}`}
                       role="button"
                       tabIndex={0}
-                      onClick={() => toggleScenario(category.name, scenario.name)}
+                      onClick={() => runSingleClick(() => toggleScenario(category.name, scenario.name))}
+                      onDoubleClick={() => runDoubleClick(() => goLevel2(category.name, scenario.name))}
                       onContextMenu={(event) => {
                         event.preventDefault();
-                        setPendingDelete({
+                        setCardMenu({
+                          x: event.clientX,
+                          y: event.clientY,
                           kind: "scenario",
                           category: category.name,
                           scenario: scenario.name,
@@ -445,16 +512,6 @@ export function ScenarioSkillPicker({
                           {summary.pending > 0 ? ` · ${summary.pending} 待就绪` : " · 全部就绪"}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        className="scenario-edit"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          goLevel2(category.name, scenario.name);
-                        }}
-                      >
-                        修改
-                      </button>
                     </div>
                   );
                 })}
@@ -469,10 +526,24 @@ export function ScenarioSkillPicker({
                       className={`scenario-card${active ? " selected" : ""}`}
                       role="button"
                       tabIndex={0}
-                      onClick={() => onToggleCustom?.(item.id)}
+                      onClick={() => runSingleClick(() => onToggleCustom?.(item.id))}
+                      onDoubleClick={() =>
+                        runDoubleClick(() => {
+                          setActiveCustomId(item.id);
+                          setActiveCategory(category.name);
+                          setActiveScenario(item.name);
+                          setLevel(2);
+                        })
+                      }
                       onContextMenu={(event) => {
                         event.preventDefault();
-                        setPendingDelete({ kind: "custom", id: item.id, label: item.name });
+                        setCardMenu({
+                          x: event.clientX,
+                          y: event.clientY,
+                          kind: "custom",
+                          id: item.id,
+                          label: item.name
+                        });
                       }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
@@ -490,19 +561,6 @@ export function ScenarioSkillPicker({
                           {item.lines.length} 要求 · {item.deps.length} 依赖 · 自建
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        className="scenario-edit"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setActiveCustomId(item.id);
-                          setActiveCategory(category.name);
-                          setActiveScenario(item.name);
-                          setLevel(2);
-                        }}
-                      >
-                        修改
-                      </button>
                     </div>
                   );
                 })}
@@ -536,8 +594,10 @@ export function ScenarioSkillPicker({
     return (
       <section className="scope-box">
         {confirmNode}
+        {menuNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">技能细分 · {activeCustom.name}</h2>
+          <span className="caption" style={{ marginRight: 8 }}>双击技能卡进入依赖</span>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="secondary-btn" onClick={() => onEditCustom?.(activeCustom.id)}>
               编辑技能
@@ -557,7 +617,11 @@ export function ScenarioSkillPicker({
         <div className="scope-inner">
           <div className="skill-cards">
             {activeCustom.lines.map((line, index) => (
-              <div key={`${index}-${line.slice(0, 8)}`} className="scenario-card skill-card">
+              <div
+                key={`${index}-${line.slice(0, 8)}`}
+                className="scenario-card skill-card"
+                onDoubleClick={() => setLevel(3)}
+              >
                 <div className="scenario-text">
                   <span className="scenario-name">
                     {line.length > 22 ? `${line.slice(0, 22)}…` : line}
@@ -566,9 +630,6 @@ export function ScenarioSkillPicker({
                     {activeCustom.deps.length} 依赖 · 自建要求
                   </span>
                 </div>
-                <button type="button" className="scenario-edit" onClick={() => setLevel(3)}>
-                  修改
-                </button>
               </div>
             ))}
           </div>
@@ -582,6 +643,7 @@ export function ScenarioSkillPicker({
     return (
       <section className="scope-box">
         {confirmNode}
+        {menuNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">依赖 · {activeCustom.name}</h2>
           <button type="button" className="ghost-btn" onClick={() => setLevel(2)}>
@@ -624,8 +686,10 @@ export function ScenarioSkillPicker({
     return (
       <section className="scope-box">
         {confirmNode}
+        {menuNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">技能细分 · {activeScenario}</h2>
+          <span className="caption" style={{ marginRight: 8 }}>双击技能卡进入依赖</span>
           <button type="button" className="ghost-btn" onClick={backToLevel1}>
             ← 返回业务场景
           </button>
@@ -641,9 +705,12 @@ export function ScenarioSkillPicker({
                 <div
                   key={skill.name}
                   className="scenario-card skill-card"
+                  onDoubleClick={() => goLevel3(skill.name)}
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    setPendingDelete({
+                    setCardMenu({
+                      x: event.clientX,
+                      y: event.clientY,
                       kind: "skill",
                       category: activeCategory,
                       scenario: activeScenario,
@@ -658,13 +725,6 @@ export function ScenarioSkillPicker({
                       {deps.length} 依赖 · {pending > 0 ? `${pending} 待就绪` : "全部就绪"}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    className="scenario-edit"
-                    onClick={() => goLevel3(skill.name)}
-                  >
-                    修改
-                  </button>
                 </div>
               );
               })}
@@ -698,6 +758,7 @@ export function ScenarioSkillPicker({
     return (
       <section className="scope-box">
         {confirmNode}
+        {menuNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">依赖 · {activeSkill}</h2>
           <button type="button" className="ghost-btn" onClick={backToLevel2}>

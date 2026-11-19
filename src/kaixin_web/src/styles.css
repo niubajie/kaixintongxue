@@ -1762,3 +1762,31 @@ input[type="range"] {
 .skill-card:hover {
   border-color: #c8d6c8;
 }
+
+/* 卡片右键菜单：只有「删除」一项 */
+.card-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 96px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 22, 31, 0.14);
+  padding: 4px;
+}
+
+.card-menu button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 13px;
+  text-align: left;
+  color: #c0392b;
+  cursor: pointer;
+}
+
+.card-menu button:hover {
+  background: #fdecea;
+}
