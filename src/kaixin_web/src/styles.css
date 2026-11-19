@@ -1609,10 +1609,13 @@ input[type="range"] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 12px 14px;
-  background: #fff;
+  border-bottom: 1px solid var(--line);
+  padding: 14px 2px;
+  background: transparent;
+}
+
+.skill-scope-row:last-child {
+  border-bottom: none;
 }
 
 .skill-scope-row.off {
@@ -1677,4 +1680,70 @@ input[type="range"] {
   padding: 12px;
   margin-top: 12px;
   background: #fbfcfe;
+}
+
+/* ---------- 选择业务场景：一个大框装三类，框外只留居中按钮 ---------- */
+.scope-box {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 22px 18px;
+  margin-top: 14px;
+}
+
+.scope-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.scope-box-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.scope-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.scope-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.scope-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.scope-supplement {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+
+.scope-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+/* L2/L3 里把列表再框一层，和 L1 的分类框呼应 */
+.scope-inner {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 12px;
+  background: #fbfcfb;
 }

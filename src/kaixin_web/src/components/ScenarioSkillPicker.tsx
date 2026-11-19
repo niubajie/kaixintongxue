@@ -15,30 +15,33 @@ import {
 } from "../data/scenarioSkills";
 
 // 三层下钻：L1 业务场景 → L2 细分技能 → L3 依赖（软件 / 模型 / 网站）
-// 需求要点：
-//   · 普通用户停在 L1，点场景框即选中
-//   · 场景框上的「修改」进入 L2；L2 可勾选去掉不需要的技能
-//   · L2 每项技能的「修改」进入 L3；L3 可改依赖、删除、导入新依赖
-//   · 用页面内切换视图 + 面包屑返回（桌面端最稳）
+//
+// 布局约定（按需求方要求）：
+//   · 每一层都是一个「大框」，标题在框内左上角，框外不放其它文字
+//   · L1 大框里放三类场景 + 补充需求；生成按钮在大框外居中
+//   · L2 同样的框，但只展示细分技能，不提供勾选/选择功能
+//   · L3 同样的框，展示依赖并可编辑
 
 interface Props {
   onNotice: (message: string) => void;
   onSelectionChange?: (summary: { scenarios: string[]; skills: number; deps: number }) => void;
+  /** L1 大框底部的内容（补充需求） */
+  footer?: React.ReactNode;
+  /** L1 大框右上角的操作（新增技能） */
+  action?: React.ReactNode;
 }
 
 interface ScopeState {
   selected: string[];
-  disabledSkills: string[];
   customDeps: Record<string, Dependency[]>;
   removedDeps: string[];
   editedDeps: Record<string, Dependency>;
 }
 
-const STORAGE_KEY = "kaixin.scenarioScope.v1";
+const STORAGE_KEY = "kaixin.scenarioScope.v2";
 
 const EMPTY_SCOPE: ScopeState = {
   selected: [],
-  disabledSkills: [],
   customDeps: {},
   removedDeps: [],
   editedDeps: {}
@@ -53,7 +56,6 @@ function loadScope(): ScopeState {
     const parsed = JSON.parse(raw) as Partial<ScopeState>;
     return {
       selected: parsed.selected ?? [],
-      disabledSkills: parsed.disabledSkills ?? [],
       customDeps: parsed.customDeps ?? {},
       removedDeps: parsed.removedDeps ?? [],
       editedDeps: parsed.editedDeps ?? {}
@@ -69,14 +71,13 @@ const STATUS_CLASS: Record<DependencyStatus, string> = {
   需授权: "dep-auth"
 };
 
-export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
+export function ScenarioSkillPicker({ onNotice, onSelectionChange, footer, action }: Props) {
   const [scope, setScope] = useState<ScopeState>(() => loadScope());
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [activeCategory, setActiveCategory] = useState("");
   const [activeScenario, setActiveScenario] = useState("");
   const [activeSkill, setActiveSkill] = useState("");
 
-  // 导入/编辑依赖的表单
   const [depForm, setDepForm] = useState<{
     mode: "add" | "edit";
     type: DependencyType;
@@ -101,9 +102,7 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
         if (!scope.selected.includes(scenarioKey(category.name, scenario.name))) {
           continue;
         }
-        skills += scenario.skills.filter(
-          (skill) => !scope.disabledSkills.includes(skillKey(category.name, scenario.name, skill.name))
-        ).length;
+        skills += scenario.skills.length;
         deps += depsOfScenario(category.name, scenario, scope).size;
       }
     }
@@ -117,16 +116,6 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
       selected: current.selected.includes(key)
         ? current.selected.filter((item) => item !== key)
         : [...current.selected, key]
-    }));
-  }, []);
-
-  const toggleSkill = useCallback((category: string, scenario: string, skill: string) => {
-    const key = skillKey(category, scenario, skill);
-    setScope((current) => ({
-      ...current,
-      disabledSkills: current.disabledSkills.includes(key)
-        ? current.disabledSkills.filter((item) => item !== key)
-        : [...current.disabledSkills, key]
     }));
   }, []);
 
@@ -169,13 +158,9 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
   const depsOfSkill = (category: string, scenario: string, skill: SubSkill): Dependency[] => {
     const key = skillKey(category, scenario, skill.name);
     const base = skill.deps
-      .map((dep) => {
-        const edited = scope.editedDeps[`${key}::${dep.type}::${dep.name}`];
-        return edited ?? dep;
-      })
+      .map((dep) => scope.editedDeps[`${key}::${dep.type}::${dep.name}`] ?? dep)
       .filter((dep) => !scope.removedDeps.includes(`${key}::${dep.type}::${dep.name}`));
-    const extra = scope.customDeps[key] ?? [];
-    return [...base, ...extra];
+    return [...base, ...(scope.customDeps[key] ?? [])];
   };
 
   const saveDep = (category: string, scenario: string, skill: SubSkill) => {
@@ -207,10 +192,7 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
             }
           };
         }
-        return {
-          ...current,
-          editedDeps: { ...current.editedDeps, [depForm.editKey]: dep }
-        };
+        return { ...current, editedDeps: { ...current.editedDeps, [depForm.editKey]: dep } };
       }
       return {
         ...current,
@@ -223,7 +205,6 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
 
   const removeDep = (category: string, scenario: string, skill: SubSkill, dep: Dependency) => {
     const key = skillKey(category, scenario, skill.name);
-    const fullKey = `${key}::${dep.type}::${dep.name}`;
     setScope((current) => {
       const isCustom = (current.customDeps[key] ?? []).some(
         (item) => item.type === dep.type && item.name === dep.name
@@ -239,7 +220,7 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
           }
         };
       }
-      return { ...current, removedDeps: [...current.removedDeps, fullKey] };
+      return { ...current, removedDeps: [...current.removedDeps, `${key}::${dep.type}::${dep.name}`] };
     });
     onNotice("依赖已移除。");
   };
@@ -256,19 +237,18 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
     onNotice("已恢复该技能的默认依赖。");
   };
 
-  // ---------- L1 ----------
+  // ---------- L1：一个大框装三类场景 ----------
   if (level === 1) {
     return (
-      <div>
-        <p className="caption" style={{ marginBottom: 12 }}>
-          先选业务场景即可；需要调整时点场景框上的「修改」，进入细分技能与依赖。
-        </p>
+      <section className="scope-box">
+        <div className="scope-box-head">
+          <h2 className="scope-box-title">选择业务场景</h2>
+          {action}
+        </div>
+        <div className="scope-groups">
         {SCENARIO_TREE.map((category) => (
-          <section key={category.name} className="scenario-section">
-            <div className="row" style={{ justifyContent: "space-between", marginTop: 16 }}>
-              <h3 className="scenario-category">{category.name}</h3>
-              <span className="caption">{category.scenarios.length} 个业务场景</span>
-            </div>
+          <section key={category.name} className="scope-group">
+            <h3 className="scope-group-title">{category.name}</h3>
             <div className="scenario-grid">
               {[...category.scenarios]
                 .sort(
@@ -320,42 +300,28 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
             </div>
           </section>
         ))}
-        <p className="caption" style={{ marginTop: 14 }}>
-          已选 {scope.selected.length} 个场景。
-        </p>
-      </div>
+        </div>
+        {footer && <div className="scope-supplement">{footer}</div>}
+      </section>
     );
   }
 
-  // ---------- L2 ----------
+  // ---------- L2：同样的框，只展示细分技能（无选择） ----------
   if (level === 2 && currentScenario) {
-    const enabled = currentScenario.skills.filter(
-      (skill) => !scope.disabledSkills.includes(skillKey(activeCategory, activeScenario, skill.name))
-    ).length;
     return (
-      <div>
-        <button type="button" className="ghost-btn" onClick={backToLevel1}>
-          ← 返回业务场景
-        </button>
-        <p className="picker-breadcrumb">
-          <span onClick={backToLevel1} role="presentation">业务场景</span>
-          <span> / </span>
-          <b>{activeScenario}</b>
-        </p>
-        <p className="caption">
-          取消勾选即从本次范围中去掉；点「修改」查看这项技能需要哪些软件、模型和网站。
-          已启用 {enabled} / {currentScenario.skills.length} 项。
-        </p>
-
-        <div className="skill-scope-list">
+      <section className="scope-box">
+        <div className="scope-box-head">
+          <h2 className="scope-box-title">技能细分 · {activeScenario}</h2>
+          <button type="button" className="ghost-btn" onClick={backToLevel1}>
+            ← 返回业务场景
+          </button>
+        </div>
+        <div className="scope-inner skill-scope-list">
           {currentScenario.skills.map((skill) => {
-            const key = skillKey(activeCategory, activeScenario, skill.name);
-            const on = !scope.disabledSkills.includes(key);
             const deps = depsOfSkill(activeCategory, activeScenario, skill);
             return (
-              <div key={key} className={`skill-scope-row${on ? "" : " off"}`}>
-                <label className="skill-scope-main">
-                  <input type="checkbox" checked={on} onChange={() => toggleSkill(activeCategory, activeScenario, skill.name)} />
+              <div key={skill.name} className="skill-scope-row">
+                <div className="skill-scope-main">
                   <span>
                     <b>{skill.name}</b>
                     <span className="caption" style={{ display: "block" }}>{skill.desc}</span>
@@ -363,34 +329,31 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
                       {deps.length} 个依赖：{deps.map((dep) => dep.name).join("、")}
                     </span>
                   </span>
-                </label>
-                <button type="button" className="secondary-btn" onClick={() => goLevel3(skill.name)}>
+                </div>
+                <button type="button" className="scenario-edit" onClick={() => goLevel3(skill.name)}>
                   修改
                 </button>
               </div>
             );
           })}
         </div>
-      </div>
+        {footer && <div className="scope-supplement">{footer}</div>}
+      </section>
     );
   }
 
-  // ---------- L3 ----------
+  // ---------- L3：同样的框，展示依赖并可编辑 ----------
   if (level === 3 && currentSkill) {
     const deps = depsOfSkill(activeCategory, activeScenario, currentSkill);
     return (
-      <div>
-        <button type="button" className="ghost-btn" onClick={backToLevel2}>
-          ← 返回细分技能
-        </button>
-        <p className="picker-breadcrumb">
-          <span onClick={backToLevel1} role="presentation">业务场景</span>
-          <span> / </span>
-          <span onClick={backToLevel2} role="presentation">{activeScenario}</span>
-          <span> / </span>
-          <b>{activeSkill}</b>
-        </p>
-        <p className="caption">{currentSkill.desc}</p>
+      <section className="scope-box">
+        <div className="scope-box-head">
+          <h2 className="scope-box-title">依赖 · {activeSkill}</h2>
+          <button type="button" className="ghost-btn" onClick={backToLevel2}>
+            ← 返回细分技能
+          </button>
+        </div>
+        <p className="caption" style={{ marginTop: 4 }}>{currentSkill.desc}</p>
 
         <table className="dep-table">
           <thead>
@@ -431,7 +394,11 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
                       >
                         编辑
                       </button>
-                      <button type="button" className="ghost-btn" onClick={() => removeDep(activeCategory, activeScenario, currentSkill, dep)}>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => removeDep(activeCategory, activeScenario, currentSkill, dep)}
+                      >
                         移除
                       </button>
                     </div>
@@ -499,26 +466,28 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
             >
               + 导入新依赖
             </button>
-            <button type="button" className="ghost-btn" onClick={() => restoreSkillDeps(activeCategory, activeScenario, currentSkill)}>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => restoreSkillDeps(activeCategory, activeScenario, currentSkill)}
+            >
               恢复默认依赖
             </button>
           </div>
         )}
-      </div>
+        {footer && <div className="scope-supplement">{footer}</div>}
+      </section>
     );
   }
 
   return null;
 }
 
-/** 汇总一个场景下所有启用技能的去重依赖 */
+/** 汇总一个场景下所有技能的去重依赖 */
 function depsOfScenario(category: string, scenario: BusinessScenario, scope: ScopeState): Map<string, Dependency> {
   const out = new Map<string, Dependency>();
   for (const skill of scenario.skills) {
     const key = skillKey(category, scenario.name, skill.name);
-    if (scope.disabledSkills.includes(key)) {
-      continue;
-    }
     const base = skill.deps
       .map((dep) => scope.editedDeps[`${key}::${dep.type}::${dep.name}`] ?? dep)
       .filter((dep) => !scope.removedDeps.includes(`${key}::${dep.type}::${dep.name}`));

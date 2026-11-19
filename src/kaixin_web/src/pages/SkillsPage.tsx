@@ -397,6 +397,9 @@ export function SkillsPage({ onNotice }: Props) {
   };
 
   const generate = async () => {
+    if (scopeSummary.scenarios.length === 0) {
+      onNotice("还没有选业务场景，方案只按软件目录生成。建议先在上方选场景。");
+    }
     if (selected.length === 0) {
       const message = "请至少选择一项技能，再生成方案。";
       setPlanError(message);
@@ -548,33 +551,32 @@ export function SkillsPage({ onNotice }: Props) {
         )}
       </div>
 
-      <div className="row" style={{ justifyContent: "space-between", marginTop: 22 }}>
-        <h2 className="section-title">选择业务场景</h2>
-        <div className="row" style={{ gap: 10 }}>
-          <span className="caption">
-            {scopeSummary.scenarios.length} 个场景 · {scopeSummary.skills} 项技能 · {scopeSummary.deps} 个依赖
-          </span>
-          <button type="button" className="secondary-btn" style={{ padding: "6px 12px" }} onClick={openCreate}>
+      <ScenarioSkillPicker
+        onNotice={onNotice}
+        onSelectionChange={setScopeSummary}
+        action={
+          <button type="button" className="ghost-btn" onClick={openCreate}>
             + 新增技能
           </button>
-        </div>
-      </div>
-      <ScenarioSkillPicker onNotice={onNotice} onSelectionChange={setScopeSummary} />
-
-      <label className="field-label">补充需求（可选）</label>
-      <textarea
-        className="textarea"
-        rows={2}
-        placeholder="例如：希望全程离线运行，优先保证响应速度"
-        value={supplement}
-        onChange={(event) => setSupplement(event.target.value)}
+        }
+        footer={
+          <>
+            <label className="field-label">补充需求（可选）</label>
+            <textarea
+              className="textarea"
+              rows={2}
+              placeholder="例如：希望全程离线运行，优先保证响应速度"
+              value={supplement}
+              onChange={(event) => setSupplement(event.target.value)}
+            />
+          </>
+        }
       />
 
-      <div className="row" style={{ marginTop: 16 }}>
+      <div className="scope-actions">
         <button type="button" className="primary-btn" onClick={() => void generate()} disabled={planning}>
           {planning ? "正在生成…" : "生成技能方案"}
         </button>
-        <span className="caption">自动合并重复软件、按依赖排序，并检测磁盘/显存/内存冲突</span>
       </div>
 
       {planError && (
