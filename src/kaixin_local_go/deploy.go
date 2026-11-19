@@ -853,6 +853,7 @@ func unzip(archivePath, targetDir string) error {
 		return fmt.Errorf("安装包文件数异常（%d 个），已中止", len(reader.File))
 	}
 	var total int64
+	var written int64
 	for _, file := range reader.File {
 		clean := filepath.Clean(file.Name)
 		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) ||
@@ -885,7 +886,7 @@ func unzip(archivePath, targetDir string) error {
 			source.Close()
 			return err
 		}
-		_, err = io.Copy(destination, source)
+		_, err = io.Copy(destination, io.LimitReader(source, maxExtractBytes-written+1))
 		source.Close()
 		closeErr := destination.Close()
 		if err != nil {
@@ -893,6 +894,15 @@ func unzip(archivePath, targetDir string) error {
 		}
 		if closeErr != nil {
 			return closeErr
+		}
+		// 压缩包里声明的大小可能造假，按实际写入量再兜一次上限。
+		info, statErr := os.Stat(target)
+		if statErr != nil {
+			return statErr
+		}
+		written += info.Size()
+		if written > maxExtractBytes {
+			return fmt.Errorf("解压后体积超过上限（3 GB），已中止")
 		}
 	}
 	return nil

@@ -103,12 +103,6 @@ func (a *App) handleWechatPollProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "kaixin_session" && cookie.Value != "" {
-			a.saveSessionToken(ctx, cookie.Value)
-		}
-	}
-
 	var payload struct {
 		Status  string     `json:"status"`
 		User    *UserBrief `json:"user"`
@@ -117,6 +111,22 @@ func (a *App) handleWechatPollProxy(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		fail(w, http.StatusBadGateway, "服务器返回格式异常")
 		return
+	}
+	// 服务端的业务错误（账号停用、参数不合法等）要原样透出，
+	// 否则前端只会看到空状态，一直轮询到超时。
+	if resp.StatusCode != http.StatusOK {
+		message := payload.Message
+		if message == "" {
+			message = fmt.Sprintf("服务器返回 HTTP %d", resp.StatusCode)
+		}
+		fail(w, resp.StatusCode, message)
+		return
+	}
+
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "kaixin_session" && cookie.Value != "" {
+			a.saveSessionToken(ctx, cookie.Value)
+		}
 	}
 
 	out := map[string]any{"status": payload.Status}

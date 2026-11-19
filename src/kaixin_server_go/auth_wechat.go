@@ -58,10 +58,24 @@ func randomState() string {
 
 // handleWechatStart 生成一次扫码登录请求，返回前端要打开的地址。
 func (a *App) handleWechatStart(w http.ResponseWriter, r *http.Request) {
-	appID, _, base, mock := wechatConfig()
-	if appID == "" && !mock {
-		fail(w, http.StatusServiceUnavailable, "未配置微信登录（KAIXIN_WECHAT_APPID / KAIXIN_WECHAT_SECRET）")
-		return
+	appID, secret, base, mock := wechatConfig()
+	// 真实模式三个变量缺一不可：缺了 Secret 换不到 openid，
+	// 缺了 PUBLIC_BASE 拼出的是相对回调地址，微信会直接拒绝。
+	if !mock {
+		var missing []string
+		if appID == "" {
+			missing = append(missing, "KAIXIN_WECHAT_APPID")
+		}
+		if secret == "" {
+			missing = append(missing, "KAIXIN_WECHAT_SECRET")
+		}
+		if base == "" {
+			missing = append(missing, "KAIXIN_PUBLIC_BASE")
+		}
+		if len(missing) > 0 {
+			fail(w, http.StatusServiceUnavailable, "未配置微信登录，缺少 "+strings.Join(missing, " / "))
+			return
+		}
 	}
 
 	state := randomState()
@@ -152,6 +166,16 @@ func (a *App) completeWechatLogin(ctx context.Context, state, openID, nickname s
 	if strings.TrimSpace(openID) == "" {
 		return fmt.Errorf("微信返回的 openid 为空")
 	}
+	// 先确认 state 真实存在且未过期，否则会凭伪造的 state 白建一个账号。
+	var reqStatus, expiresAt string
+	if err := a.db.QueryRow(ctx,
+		`SELECT status, expires_at FROM wechat_auth_requests WHERE state = $1`, state).
+		Scan(&reqStatus, &expiresAt); err != nil {
+		return fmt.Errorf("扫码请求无效，请重新发起")
+	}
+	if expires, parseErr := time.Parse(time.RFC3339, expiresAt); parseErr == nil && time.Now().After(expires) {
+		return fmt.Errorf("二维码已过期，请重新发起")
+	}
 	var userID int64
 	err := a.db.QueryRow(ctx, `SELECT id FROM users WHERE wechat_open_id = $1`, openID).Scan(&userID)
 	if err != nil {
@@ -217,6 +241,12 @@ func (a *App) handleWechatMockPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := r.URL.Query().Get("state")
+	// state 来自查询串，必须转义后再拼进脚本，避免被构造成可执行代码。
+	stateJSON, err := json.Marshal(state)
+	if err != nil {
+		http.Error(w, "参数格式错误", http.StatusBadRequest)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(`<!doctype html><meta charset="utf-8">
 <title>微信登录（联调）</title>
@@ -228,7 +258,7 @@ func (a *App) handleWechatMockPage(w http.ResponseWriter, r *http.Request) {
 <script>
 async function confirmLogin(){
   const r = await fetch('/api/auth/wechat/mock-confirm',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({state:'` + state + `',openid:'mock_openid_001',nickname:'微信测试用户'})});
+    body:JSON.stringify({state:` + string(stateJSON) + `,openid:'mock_openid_001',nickname:'微信测试用户'})});
   document.getElementById('msg').textContent = r.ok ? '已确认，可以回到应用了' : '确认失败';
 }
 </script>`))
