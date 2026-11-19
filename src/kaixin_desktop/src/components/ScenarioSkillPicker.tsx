@@ -270,26 +270,40 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
               <span className="caption">{category.scenarios.length} 个业务场景</span>
             </div>
             <div className="scenario-grid">
-              {category.scenarios.map((scenario) => {
-                const key = scenarioKey(category.name, scenario.name);
-                const active = scope.selected.includes(key);
-                const summary = scenarioSummary(scenario);
-                return (
-                  <div
-                    key={key}
-                    className={`scenario-card${active ? " selected" : ""}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => toggleScenario(category.name, scenario.name)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        toggleScenario(category.name, scenario.name);
-                      }
-                    }}
-                  >
-                    <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span className="scenario-name">{scenario.name}</span>
+              {[...category.scenarios]
+                .sort(
+                  (left, right) =>
+                    Number(scope.selected.includes(scenarioKey(category.name, right.name))) -
+                    Number(scope.selected.includes(scenarioKey(category.name, left.name)))
+                )
+                .map((scenario) => {
+                  const key = scenarioKey(category.name, scenario.name);
+                  const active = scope.selected.includes(key);
+                  const summary = scenarioSummary(scenario);
+                  return (
+                    <div
+                      key={key}
+                      className={`scenario-card${active ? " selected" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => toggleScenario(category.name, scenario.name)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleScenario(category.name, scenario.name);
+                        }
+                      }}
+                    >
+                      <div className="scenario-text">
+                        <span className="scenario-name">
+                          {active && <span className="scenario-tick">✓</span>}
+                          {scenario.name}
+                        </span>
+                        <span className="scenario-meta">
+                          {summary.skills} 技能 · {summary.deps} 依赖
+                          {summary.pending > 0 ? ` · ${summary.pending} 待就绪` : " · 全部就绪"}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         className="scenario-edit"
@@ -301,14 +315,8 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange }: Props) {
                         修改
                       </button>
                     </div>
-                    <span className="caption" style={{ display: "block", marginTop: 6 }}>
-                      {summary.skills} 项技能 · {summary.deps} 个依赖
-                      {summary.pending > 0 ? ` · ${summary.pending} 项待就绪` : " · 全部就绪"}
-                    </span>
-                    {active && <span className="scenario-check">✓ 已选择</span>}
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </section>
         ))}

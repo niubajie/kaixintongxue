@@ -1509,77 +1509,107 @@ input[type="range"] {
 }
 
 /* ---------- 业务场景三层下钻 ---------- */
-.scenario-category {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-}
 
+/* ---------- 业务场景卡片：浅灰绿底 + 右侧竖向居中按钮；选中变山青色并前移 ---------- */
 .scenario-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-  margin-top: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
 }
 
 .scenario-card {
-  position: relative;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #eef2ee;
+  border: 1px solid #e2e8e2;
+  border-radius: 14px;
+  padding: 15px 16px;
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: background 0.16s, border-color 0.16s, transform 0.16s, box-shadow 0.16s;
 }
 
 .scenario-card:hover {
-  border-color: var(--accent);
+  border-color: #c8d6c8;
   box-shadow: 0 4px 14px rgba(20, 22, 31, 0.06);
 }
 
 .scenario-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-light);
+  background: #0f7b6c;
+  border-color: #0f7b6c;
+  box-shadow: 0 6px 18px rgba(15, 123, 108, 0.24);
+}
+
+.scenario-text {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
 }
 
 .scenario-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  color: #22302a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-tick {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+  color: #fff;
+}
+
+.scenario-meta {
+  font-size: 12px;
+  color: #6b7b73;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.scenario-card.selected .scenario-name {
+  color: #fff;
+}
+
+.scenario-card.selected .scenario-meta {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .scenario-edit {
-  border: 1px solid var(--line);
+  flex: 0 0 auto;
+  border: 1px solid #dfe5df;
   background: #fff;
-  border-radius: 8px;
-  padding: 3px 10px;
+  border-radius: 999px;
+  padding: 6px 15px;
   font-size: 12px;
-  color: var(--text-soft);
+  color: #3c4a44;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .scenario-edit:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: #0f7b6c;
+  color: #0f7b6c;
 }
 
-.scenario-check {
-  position: absolute;
-  right: 14px;
-  bottom: 12px;
-  font-size: 12px;
-  color: var(--accent);
-  font-weight: 600;
+.scenario-card.selected .scenario-edit {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
 }
 
-.picker-breadcrumb {
-  margin: 10px 0 6px;
-  font-size: 13px;
-  color: var(--text-soft);
-}
-
-.picker-breadcrumb span[role="presentation"] {
-  cursor: pointer;
-  color: var(--accent);
+.scenario-card.selected .scenario-edit:hover {
+  background: rgba(255, 255, 255, 0.28);
+  color: #fff;
 }
 
 .skill-scope-list {
