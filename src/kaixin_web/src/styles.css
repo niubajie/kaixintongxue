@@ -1846,3 +1846,9 @@ input[type="range"] {
   cursor: not-allowed;
   box-shadow: none;
 }
+
+/* 次级按钮禁用态：与常态同形，仅变淡 */
+.secondary-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

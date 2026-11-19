@@ -604,18 +604,15 @@ export function ScenarioSkillPicker({
 
         {matchLines.length > 0 && (
           <div style={{ marginTop: 10 }}>
-            <span className="caption">AI 技能匹配结果：</span>
-            <div className="edit-skill-list">
-              {matchLines.map((line, index) => (
-                <div key={`match-${index}`} className="edit-skill-row">
-                  <span className="edit-skill-text">{line.text}</span>
-                  <span className="edit-skill-match">
-                    [{line.software ?? "无软件"}]
-                    {line.site ? `[${line.site}]` : ""}
-                  </span>
+            {matchLines.map((line, index) => (
+              <div key={`match-${index}`} style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 13, lineHeight: 1.6 }}>{line.text}</div>
+                <div style={{ fontSize: 12, color: "#0f7b6c", fontWeight: 600, marginTop: 2 }}>
+                  [{line.software ?? "无软件"}]
+                  {line.site ? `[${line.site}]` : ""}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -623,19 +620,31 @@ export function ScenarioSkillPicker({
           className="row"
           style={{ marginTop: 16, justifyContent: "space-between", alignItems: "center" }}
         >
-          <button type="button" className="secondary-btn" onClick={() => void runSkillMatch()} disabled={matching}>
+          <button
+            type="button"
+            className="secondary-btn"
+            style={{ minWidth: 120 }}
+            onClick={() => void runSkillMatch()}
+            disabled={matching}
+          >
             {matching ? "匹配中…" : "AI 技能匹配"}
           </button>
           <button
             type="button"
-            className="primary-btn"
+            className="secondary-btn"
+            style={{ minWidth: 120 }}
             onClick={saveEdits}
             disabled={draftText === initialText}
             title={draftText === initialText ? "内容没有改动" : "保存修改"}
           >
             保存
           </button>
-          <button type="button" className="ghost-btn" onClick={() => setEditOpen(false)}>
+          <button
+            type="button"
+            className="secondary-btn"
+            style={{ minWidth: 120 }}
+            onClick={() => setEditOpen(false)}
+          >
             关闭
           </button>
         </div>
