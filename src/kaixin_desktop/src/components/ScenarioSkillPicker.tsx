@@ -316,26 +316,30 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange, footer, actio
             ← 返回业务场景
           </button>
         </div>
-        <div className="scope-inner skill-scope-list">
-          {currentScenario.skills.map((skill) => {
-            const deps = depsOfSkill(activeCategory, activeScenario, skill);
-            return (
-              <div key={skill.name} className="skill-scope-row">
-                <div className="skill-scope-main">
-                  <span>
-                    <b>{skill.name}</b>
-                    <span className="caption" style={{ display: "block" }}>{skill.desc}</span>
-                    <span className="caption" style={{ display: "block" }}>
-                      {deps.length} 个依赖：{deps.map((dep) => dep.name).join("、")}
+        <div className="scope-inner">
+          <div className="skill-cards">
+            {currentScenario.skills.map((skill) => {
+              const deps = depsOfSkill(activeCategory, activeScenario, skill);
+              const pending = deps.filter((dep) => dep.status !== "已就绪").length;
+              return (
+                <div key={skill.name} className="scenario-card skill-card">
+                  <div className="scenario-text">
+                    <span className="scenario-name">{skill.name}</span>
+                    <span className="scenario-meta">
+                      {deps.length} 依赖 · {pending > 0 ? `${pending} 待就绪` : "全部就绪"}
                     </span>
-                  </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="scenario-edit"
+                    onClick={() => goLevel3(skill.name)}
+                  >
+                    修改
+                  </button>
                 </div>
-                <button type="button" className="scenario-edit" onClick={() => goLevel3(skill.name)}>
-                  修改
-                </button>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
         {footer && <div className="scope-supplement">{footer}</div>}
       </section>

@@ -1762,3 +1762,18 @@ input[type="range"] {
   margin-top: 12px;
   background: #fbfcfb;
 }
+
+/* L2 技能卡片：与 L1 场景卡片同一套视觉 */
+.skill-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 14px;
+}
+
+.skill-card {
+  cursor: default;
+}
+
+.skill-card:hover {
+  border-color: #c8d6c8;
+}
