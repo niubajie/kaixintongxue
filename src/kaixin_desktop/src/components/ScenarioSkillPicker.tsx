@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { matchSoftware } from "../deployApi";
 import {
   DEPENDENCY_STATUSES,
   DEPENDENCY_TYPES,
@@ -92,6 +93,8 @@ interface Props {
   onEditCustom?: (id: string) => void;
   /** 右键删除自建技能 */
   onDeleteCustom?: (id: string) => void;
+  /** 保存自建技能的技能要求（L2 编辑弹窗） */
+  onUpdateCustomContent?: (id: string, content: string) => void;
 }
 
 interface ScopeState {
@@ -142,7 +145,8 @@ export function ScenarioSkillPicker({
   selectedCustom = [],
   onToggleCustom,
   onEditCustom,
-  onDeleteCustom
+  onDeleteCustom,
+  onUpdateCustomContent
 }: Props) {
   const [scope, setScope] = useState<ScopeState>(() => loadScope());
   const [level, setLevel] = useState<1 | 2 | 3>(1);
@@ -202,6 +206,26 @@ export function ScenarioSkillPicker({
     }
     action();
   };
+
+  // L2「编辑」弹窗：列出全部技能细分与依赖，底部可跑 AI 技能匹配
+  const [editOpen, setEditOpen] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [matching, setMatching] = useState(false);
+  // 内置场景的编辑结果存本地（Excel 是只读数据源）
+  const [skillOverrides, setSkillOverrides] = useState<
+    Record<string, { texts: Record<string, string>; extras: string[]; removed: string[] }>
+  >(() => {
+    try {
+      return JSON.parse(localStorage.getItem("kaixin.skillOverrides.v1") ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("kaixin.skillOverrides.v1", JSON.stringify(skillOverrides));
+  }, [skillOverrides]);
+  const [matchLines, setMatchLines] = useState<{ text: string; software?: string; site?: string }[]>([]);
 
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: "scenario"; category: string; scenario: string; label: string }
@@ -449,12 +473,146 @@ export function ScenarioSkillPicker({
     onNotice("已恢复该技能的默认依赖。");
   };
 
+  // 当前 L2 场景的技能与依赖（内置 / 自建都适用）
+  // 把本地编辑叠加到内置数据上（改文字 / 删除 / 新增）
+  const effectiveSkills = (category: string, scenarioName: string, base: SubSkill[]): SubSkill[] => {
+    const override = skillOverrides[scenarioKey(category, scenarioName)];
+    const kept = base
+      .filter((skill) => !(override?.removed ?? []).includes(skill.name))
+      .map((skill) => ({ ...skill, desc: override?.texts?.[skill.name] ?? skill.desc, deps: skill.deps ?? [] }));
+    const extras = (override?.extras ?? [])
+      .filter(Boolean)
+      .map((text) => ({ name: text.slice(0, 24), desc: text, deps: [] as Dependency[] }));
+    return [...kept, ...extras];
+  };
+
+  const activeSkills = activeCustom
+    ? activeCustom.lines.map((line) => ({ name: line, desc: line }))
+    : currentScenario
+      ? effectiveSkills(activeCategory, activeScenario, currentScenario.skills)
+      : [];
+
+  const runSkillMatch = async () => {
+    if (activeSkills.length === 0) {
+      return;
+    }
+    setMatching(true);
+    try {
+      const content = draftText.trim();
+      const result = await matchSoftware(content);
+      const lines = (result.lines ?? []).map((line) => ({
+        text: line.text,
+        software: line.software,
+        site: line.site
+      }));
+      setMatchLines(lines);
+      if (lines.length === 0) {
+        onNotice("没有匹配到软件，可到依赖页手动导入。");
+      }
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "AI 技能匹配失败");
+    } finally {
+      setMatching(false);
+    }
+  };
+
+  const openEditDialog = () => {
+    setDraftText(activeSkills.map((skill) => skill.desc || skill.name).join("\n"));
+    setMatchLines([]);
+    setEditOpen(true);
+  };
+
+  const saveEdits = () => {
+    const cleaned = draftText.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (activeCustom) {
+      onUpdateCustomContent?.(activeCustom.id, cleaned.join("\\n"));
+      setEditOpen(false);
+      onNotice("已保存技能细分。");
+      return;
+    }
+    const key = scenarioKey(activeCategory, activeScenario);
+    const base = currentScenario?.skills ?? [];
+    const texts: Record<string, string> = {};
+    const removed: string[] = [];
+    base.forEach((skill, index) => {
+      const next = cleaned[index]?.trim();
+      if (!next) {
+        removed.push(skill.name);
+        return;
+      }
+      if (next !== (skill.desc || skill.name)) {
+        texts[skill.name] = next;
+      }
+    });
+    const extras = cleaned.slice(base.length).filter(Boolean);
+    setSkillOverrides((current) => ({ ...current, [key]: { texts, extras, removed } }));
+    setEditOpen(false);
+    onNotice("已保存技能细分。");
+  };
+
+  const editDialogNode = editOpen ? (
+    <div className="dialog-mask" onClick={() => setEditOpen(false)}>
+      <div
+        className="dialog"
+        style={{ maxWidth: 720, width: "92%", maxHeight: "82vh", overflow: "auto" }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 className="dialog-title">编辑 · {activeCustom ? activeCustom.name : activeScenario}</h2>
+        <p className="caption" style={{ marginTop: 6 }}>
+          一行一条技能要求，回车换行；删掉整行即移除该条。改完点「保存」。
+        </p>
+
+        <textarea
+          className="textarea"
+          style={{ marginTop: 10, minHeight: 220, fontFamily: "inherit", lineHeight: 1.7 }}
+          value={draftText}
+          placeholder={"采集规格、价格与供应商信息。\n汇总竞品销量与评价趋势。"}
+          onChange={(event) => {
+            setDraftText(event.target.value);
+            setMatchLines([]);
+          }}
+        />
+
+        {matchLines.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <span className="caption">AI 技能匹配结果：</span>
+            <div className="edit-skill-list">
+              {matchLines.map((line, index) => (
+                <div key={`match-${index}`} className="edit-skill-row">
+                  <span className="edit-skill-text">{line.text}</span>
+                  <span className="edit-skill-match">
+                    [{line.software ?? "无软件"}]
+                    {line.site ? `[${line.site}]` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="row" style={{ marginTop: 16, gap: 8 }}>
+          <button type="button" className="primary-btn" onClick={saveEdits}>
+            保存
+          </button>
+          <button type="button" className="secondary-btn" onClick={() => void runSkillMatch()} disabled={matching}>
+            {matching ? "匹配中…" : "AI 技能匹配"}
+          </button>
+          <button type="button" className="ghost-btn" onClick={() => setEditOpen(false)}>
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+
   // ---------- L1：一个大框装三类场景 ----------
   if (level === 1) {
     return (
       <section className="scope-box">
         {confirmNode}
         {menuNode}
+        {editDialogNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">选择业务场景</h2>
           <span className="caption">双击卡片进入细分技能 · 右键可删除</span>
@@ -595,12 +753,15 @@ export function ScenarioSkillPicker({
       <section className="scope-box">
         {confirmNode}
         {menuNode}
+        {editDialogNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">技能细分 · {activeCustom.name}</h2>
-          <span className="caption" style={{ marginRight: 8 }}>双击技能卡进入依赖</span>
           <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="secondary-btn" onClick={() => onEditCustom?.(activeCustom.id)}>
-              编辑技能
+            <button type="button" className="secondary-btn" onClick={openEditDialog}>
+              编辑
+            </button>
+            <button type="button" className="ghost-btn" onClick={() => onEditCustom?.(activeCustom.id)}>
+              编辑技能定义
             </button>
             <button
               type="button"
@@ -644,6 +805,7 @@ export function ScenarioSkillPicker({
       <section className="scope-box">
         {confirmNode}
         {menuNode}
+        {editDialogNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">依赖 · {activeCustom.name}</h2>
           <button type="button" className="ghost-btn" onClick={() => setLevel(2)}>
@@ -687,16 +849,21 @@ export function ScenarioSkillPicker({
       <section className="scope-box">
         {confirmNode}
         {menuNode}
+        {editDialogNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">技能细分 · {activeScenario}</h2>
-          <span className="caption" style={{ marginRight: 8 }}>双击技能卡进入依赖</span>
-          <button type="button" className="ghost-btn" onClick={backToLevel1}>
-            ← 返回业务场景
-          </button>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="secondary-btn" onClick={openEditDialog}>
+              编辑
+            </button>
+            <button type="button" className="ghost-btn" onClick={backToLevel1}>
+              ← 返回业务场景
+            </button>
+          </div>
         </div>
         <div className="scope-inner">
           <div className="skill-cards">
-            {currentScenario.skills
+            {effectiveSkills(activeCategory, activeScenario, currentScenario.skills)
               .filter((skill) => !hiddenSkills.includes(skillKey(activeCategory, activeScenario, skill.name)))
               .map((skill) => {
               const deps = depsOfSkill(activeCategory, activeScenario, skill);
@@ -721,6 +888,13 @@ export function ScenarioSkillPicker({
                 >
                   <div className="scenario-text">
                     <span className="scenario-name">{skill.name}</span>
+                    <span
+                      className="scenario-meta"
+                      title={skill.desc}
+                      style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                    >
+                      {skill.desc}
+                    </span>
                     <span className="scenario-meta">
                       {deps.length} 依赖 · {pending > 0 ? `${pending} 待就绪` : "全部就绪"}
                     </span>
@@ -759,6 +933,7 @@ export function ScenarioSkillPicker({
       <section className="scope-box">
         {confirmNode}
         {menuNode}
+        {editDialogNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">依赖 · {activeSkill}</h2>
           <button type="button" className="ghost-btn" onClick={backToLevel2}>

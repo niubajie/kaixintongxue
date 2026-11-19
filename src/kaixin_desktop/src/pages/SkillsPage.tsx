@@ -345,6 +345,33 @@ export function SkillsPage({ onNotice }: Props) {
       matches: skill.matches
     }));
 
+  // L2 编辑弹窗保存自建技能的要求文字
+  const updateCustomContent = async (id: string, content: string) => {
+    const target = skills.find((item) => item.id === id);
+    if (!target) {
+      return;
+    }
+    setSkills((list) =>
+      list.map((item) =>
+        item.id === id
+          ? { ...item, content, description: content.split("\n")[0] ?? item.description }
+          : item
+      )
+    );
+    try {
+      await saveCustomSkill({
+        id,
+        name: target.name,
+        description: content,
+        category: target.category,
+        softwareIds: matchSoftwareIds(target.matches),
+        siteIds: []
+      });
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "保存到本地库失败");
+    }
+  };
+
   // 右键删除自建技能：确认后先删本地库，再从列表移除
   const removeCustomSkill = async (id: string) => {
     const target = skills.find((item) => item.id === id);
@@ -640,6 +667,7 @@ export function SkillsPage({ onNotice }: Props) {
         onToggleCustom={toggleCustomSkill}
         onEditCustom={editCustomSkill}
         onDeleteCustom={removeCustomSkill}
+        onUpdateCustomContent={updateCustomContent}
         action={
           <button type="button" className="ghost-btn" onClick={openCreate}>
             + 新增技能
