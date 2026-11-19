@@ -52,6 +52,7 @@ function toSkillOption(record: CustomSkillRecord): SkillOption {
     content: record.description,
     icon: record.name.slice(0, 1),
     description: firstLine || "自建技能",
+    category: record.category,
     demand: 1,
     matches: record.softwareIds.map((softwareId) => ({
       text: "",
@@ -76,6 +77,8 @@ function matchSiteIds(matches?: SkillOption["matches"]): string[] {
 interface SkillDraft {
   name: string;
   content: string;
+  /** 归属 L1 大类：工作类 / 学习类 / 生活类 */
+  category: string;
 }
 
 const ACTION_LABEL: Record<string, string> = {
@@ -158,7 +161,7 @@ export function SkillsPage({ onNotice }: Props) {
   const [catalog, setCatalog] = useState<SoftwareEntry[]>([]);
   const [editing, setEditing] = useState<SkillOption | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [draft, setDraft] = useState<SkillDraft>({ name: "", content: "" });
+  const [draft, setDraft] = useState<SkillDraft>({ name: "", content: "", category: "工作类" });
   const [draftMatches, setDraftMatches] = useState<MatchReason[]>([]);
   const [matching, setMatching] = useState(false);
   // 弹窗内的匹配结果提示：底部状态栏容易被忽略，错误直接显示在按钮上方。
@@ -337,7 +340,10 @@ export function SkillsPage({ onNotice }: Props) {
       id: skill.id,
       name: skill.name,
       description: skill.description,
-      demand: skill.demand
+      demand: skill.demand,
+      category: skill.category,
+      content: skill.content,
+      matches: skill.matches
     }));
 
   // 右键删除自建技能：确认后先删本地库，再从列表移除
@@ -374,7 +380,7 @@ export function SkillsPage({ onNotice }: Props) {
 
   const openEdit = (skill: SkillOption) => {
     setEditing(skill);
-    setDraft({ name: skill.name, content: skill.content ?? "" });
+    setDraft({ name: skill.name, content: skill.content ?? "", category: skill.category ?? "工作类" });
     setDraftMatches([]);
     setDraftNotice(null);
     setDialogOpen(true);
@@ -382,7 +388,7 @@ export function SkillsPage({ onNotice }: Props) {
 
   const openCreate = () => {
     setEditing(null);
-    setDraft({ name: "", content: "" });
+    setDraft({ name: "", content: "", category: "工作类" });
     setDraftMatches([]);
     setDraftNotice(null);
     setDialogOpen(true);
@@ -426,7 +432,7 @@ export function SkillsPage({ onNotice }: Props) {
       setSkills((list) =>
         list.map((item) =>
           item.id === editing.id
-            ? { ...item, name, content, matches, icon: name.slice(0, 1), description: content ? content.split("\n")[0] : item.description }
+            ? { ...item, name, content, matches, category: draft.category, icon: name.slice(0, 1), description: content ? content.split("\n")[0] : item.description }
             : item
         )
       );
@@ -437,6 +443,7 @@ export function SkillsPage({ onNotice }: Props) {
             id: editing.id,
             name,
             description: content,
+            category: draft.category,
             softwareIds: matchSoftwareIds(matches),
             siteIds: matchSiteIds(matches)
           });
@@ -448,7 +455,7 @@ export function SkillsPage({ onNotice }: Props) {
       const id = `custom-${Date.now()}`;
       setSkills((list) => [
         ...list,
-        { id, name, content, matches, icon: name.slice(0, 1), description: content ? content.split("\n")[0] : "自建技能", demand: 1 }
+        { id, name, content, matches, category: draft.category, icon: name.slice(0, 1), description: content ? content.split("\n")[0] : "自建技能", demand: 1 }
       ]);
       setSelected((current) => [id, ...current]);
       try {
@@ -456,6 +463,7 @@ export function SkillsPage({ onNotice }: Props) {
           id,
           name,
           description: content,
+          category: draft.category,
           softwareIds: matchSoftwareIds(matches),
           siteIds: matchSiteIds(matches)
         });
@@ -905,7 +913,25 @@ export function SkillsPage({ onNotice }: Props) {
         <div className="dialog-mask" onClick={() => setDialogOpen(false)}>
           <div className="dialog" onClick={(event) => event.stopPropagation()}>
             <h2 className="dialog-title">{editing ? "修改技能" : "新增技能"}</h2>
-            <label className="field-label">技能名称</label>
+            <label className="field-label">归属大类</label>
+          <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+            {["工作类", "学习类", "生活类"].map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={draft.category === item ? "primary-btn" : "secondary-btn"}
+                onClick={() => setDraft({ ...draft, category: item })}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <p className="caption" style={{ marginBottom: 8 }}>
+            选中的大类决定它出现在哪一栏；下面的技能要求会成为第二层「细分技能」，
+            匹配到的软件与网站是第三层「依赖」。
+          </p>
+
+          <label className="field-label">技能名称</label>
             <input
               className="input"
               value={draft.name}

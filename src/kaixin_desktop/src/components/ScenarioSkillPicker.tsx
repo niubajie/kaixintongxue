@@ -28,6 +28,55 @@ interface CustomSkill {
   name: string;
   description: string;
   demand: number;
+  /** 归属 L1 大类：工作类 / 学习类 / 生活类 */
+  category?: string;
+  /** 技能要求原文，按行拆成 L2 细分技能 */
+  content?: string;
+  /** 匹配出来的依赖（软件 / 网站），作为 L3 */
+  matches?: { software?: string; site?: string; reasons?: string[] }[];
+}
+
+const CATEGORY_ALIASES: Record<string, string> = {
+  工作: "工作类",
+  学习: "学习类",
+  生活: "生活类",
+  工作类: "工作类",
+  学习类: "学习类",
+  生活类: "生活类"
+};
+
+/** 把自建技能展开成「场景 → 细分技能 → 依赖」 */
+function buildCustomScenario(skill: CustomSkill) {
+  const lines = (skill.content ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const deps: Dependency[] = [];
+  for (const match of skill.matches ?? []) {
+    if (match.software && !deps.some((item) => item.name === match.software)) {
+      deps.push({
+        type: "本地软件",
+        name: match.software,
+        purpose: match.reasons?.[0] ?? "",
+        status: "已就绪"
+      });
+    }
+    if (match.site && !deps.some((item) => item.name === match.site)) {
+      deps.push({
+        type: "网站平台",
+        name: match.site,
+        purpose: "网站授权",
+        status: "需授权"
+      });
+    }
+  }
+  return {
+    id: skill.id,
+    category: CATEGORY_ALIASES[skill.category ?? ""] ?? "工作类",
+    name: skill.name,
+    lines: lines.length > 0 ? lines : [skill.description || skill.name],
+    deps
+  };
 }
 
 interface Props {
@@ -103,6 +152,7 @@ export function ScenarioSkillPicker({
   const [activeCategory, setActiveCategory] = useState("");
   const [activeScenario, setActiveScenario] = useState("");
   const [activeSkill, setActiveSkill] = useState("");
+  const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
 
   // 右键删除：自建技能真删；业务场景与细分技能是内置数据，只做「本地隐藏」
   const [hiddenScenarios, setHiddenScenarios] = useState<string[]>(() => {
@@ -214,6 +264,7 @@ export function ScenarioSkillPicker({
   }, []);
 
   const goLevel2 = (category: string, scenario: string) => {
+    setActiveCustomId(null);
     setActiveCategory(category);
     setActiveScenario(scenario);
     setLevel(2);
@@ -225,6 +276,7 @@ export function ScenarioSkillPicker({
   };
 
   const backToLevel1 = () => {
+    setActiveCustomId(null);
     setLevel(1);
     setActiveCategory("");
     setActiveScenario("");
@@ -235,6 +287,13 @@ export function ScenarioSkillPicker({
     setLevel(2);
     setActiveSkill("");
   };
+
+  // 自建技能按大类展开，和内置场景排在一起
+  const customScenarios = useMemo(() => (customSkills ?? []).map(buildCustomScenario), [customSkills]);
+
+  const activeCustom = activeCustomId
+    ? customScenarios.find((item) => item.id === activeCustomId) ?? null
+    : null;
 
   const currentCategory: ScenarioCategory | undefined = useMemo(
     () => SCENARIO_TREE.find((item) => item.name === activeCategory),
@@ -402,6 +461,54 @@ export function ScenarioSkillPicker({
                     </div>
                   );
                 })}
+
+              {customScenarios
+                .filter((item) => item.category === category.name)
+                .map((item) => {
+                  const active = selectedCustom.includes(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`scenario-card${active ? " selected" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onToggleCustom?.(item.id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setPendingDelete({ kind: "custom", id: item.id, label: item.name });
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onToggleCustom?.(item.id);
+                        }
+                      }}
+                    >
+                      <div className="scenario-text">
+                        <span className="scenario-name">
+                          {active && <span className="scenario-tick">✓</span>}
+                          {item.name}
+                        </span>
+                        <span className="scenario-meta">
+                          {item.lines.length} 要求 · {item.deps.length} 依赖 · 自建
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="scenario-edit"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setActiveCustomId(item.id);
+                          setActiveCategory(category.name);
+                          setActiveScenario(item.name);
+                          setLevel(2);
+                        }}
+                      >
+                        修改
+                      </button>
+                    </div>
+                  );
+                })}
             </div>
           </section>
         ))}
@@ -422,56 +529,97 @@ export function ScenarioSkillPicker({
           </p>
         )}
 
-        {customSkills.length > 0 && (
-          <section className="scope-group">
-            <h3 className="scope-group-title">自定义技能</h3>
-            <div className="scenario-grid">
-              {customSkills.map((skill) => {
-                const active = selectedCustom.includes(skill.id);
-                return (
-                  <div
-                    key={skill.id}
-                    className={`scenario-card${active ? " selected" : ""}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onToggleCustom?.(skill.id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setPendingDelete({ kind: "custom", id: skill.id, label: skill.name });
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onToggleCustom?.(skill.id);
-                      }
-                    }}
-                  >
-                    <div className="scenario-text">
-                      <span className="scenario-name">
-                        {active && <span className="scenario-tick">✓</span>}
-                        {skill.name}
-                      </span>
-                      <span className="scenario-meta">
-                        {(skill.description || "自建技能").slice(0, 14)} · 能力 Lv.{skill.demand}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="scenario-edit"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEditCustom?.(skill.id);
-                      }}
-                    >
-                      修改
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
         </div>
+        {footer && <div className="scope-supplement">{footer}</div>}
+      </section>
+    );
+  }
+
+  // ---------- L2（自建技能）：技能要求 = 细分技能 ----------
+  if (level === 2 && activeCustom) {
+    return (
+      <section className="scope-box">
+        {confirmNode}
+        <div className="scope-box-head">
+          <h2 className="scope-box-title">技能细分 · {activeCustom.name}</h2>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="secondary-btn" onClick={() => onEditCustom?.(activeCustom.id)}>
+              编辑技能
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                setActiveCustomId(null);
+                setLevel(1);
+              }}
+            >
+              ← 返回业务场景
+            </button>
+          </div>
+        </div>
+        <div className="scope-inner">
+          <div className="skill-cards">
+            {activeCustom.lines.map((line, index) => (
+              <div key={`${index}-${line.slice(0, 8)}`} className="scenario-card skill-card">
+                <div className="scenario-text">
+                  <span className="scenario-name">
+                    {line.length > 22 ? `${line.slice(0, 22)}…` : line}
+                  </span>
+                  <span className="scenario-meta">
+                    {activeCustom.deps.length} 依赖 · 自建要求
+                  </span>
+                </div>
+                <button type="button" className="scenario-edit" onClick={() => setLevel(3)}>
+                  修改
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        {footer && <div className="scope-supplement">{footer}</div>}
+      </section>
+    );
+  }
+
+  // ---------- L3（自建技能）：匹配到的依赖 ----------
+  if (level === 3 && activeCustom) {
+    return (
+      <section className="scope-box">
+        {confirmNode}
+        <div className="scope-box-head">
+          <h2 className="scope-box-title">依赖 · {activeCustom.name}</h2>
+          <button type="button" className="ghost-btn" onClick={() => setLevel(2)}>
+            ← 返回细分技能
+          </button>
+        </div>
+        <table className="dep-table">
+          <thead>
+            <tr>
+              <th>依赖类型</th>
+              <th>依赖名称</th>
+              <th>用途</th>
+              <th>就绪状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeCustom.deps.map((dep) => (
+              <tr key={`${dep.type}-${dep.name}`}>
+                <td>{dep.type}</td>
+                <td>{dep.name}</td>
+                <td className="caption">{dep.purpose || "—"}</td>
+                <td>
+                  <span className={`dep-status ${STATUS_CLASS[dep.status]}`}>{dep.status}</span>
+                </td>
+              </tr>
+            ))}
+            {activeCustom.deps.length === 0 && (
+              <tr>
+                <td colSpan={4}>这条技能还没有匹配到依赖，可在技能编辑里点「配置ai软件」。</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
         {footer && <div className="scope-supplement">{footer}</div>}
       </section>
     );

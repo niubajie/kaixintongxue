@@ -33,6 +33,8 @@ export interface SkillOption {
   demand: number;
   /** 技能内容，一行一条；自定义技能也保存在这里。 */
   content?: string;
+  /** 自建技能归属的 L1 大类：工作类 / 学习类 / 生活类 */
+  category?: string;
   /** 「配置ai软件」的匹配结果，用于生成方案。 */
   matches?: SkillMatch[];
 }

@@ -152,6 +152,7 @@ type CustomSkill struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
+	Category    string   `json:"category"`
 	SoftwareIDs []string `json:"softwareIds"`
 	SiteIDs     []string `json:"siteIds"`
 	CreatedAt   string   `json:"createdAt"`
@@ -160,7 +161,7 @@ type CustomSkill struct {
 
 func (s *Store) ListCustomSkills(ctx context.Context) ([]CustomSkill, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, description, software_ids, site_ids, created_at, updated_at
+		`SELECT id, name, description, category, software_ids, site_ids, created_at, updated_at
 		   FROM custom_skills ORDER BY updated_at DESC`)
 	if err != nil {
 		return nil, err
@@ -173,7 +174,7 @@ func (s *Store) ListCustomSkills(ctx context.Context) ([]CustomSkill, error) {
 			item                 CustomSkill
 			softwareJSON, siteJS string
 		)
-		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &softwareJSON, &siteJS,
+		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Category, &softwareJSON, &siteJS,
 			&item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -198,15 +199,16 @@ func (s *Store) SaveCustomSkill(ctx context.Context, item CustomSkill) (CustomSk
 	item.UpdatedAt = now
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO custom_skills(id, name, description, software_ids, site_ids, created_at, updated_at)
-		 VALUES(?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO custom_skills(id, name, description, category, software_ids, site_ids, created_at, updated_at)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   name = excluded.name,
 		   description = excluded.description,
+		   category = excluded.category,
 		   software_ids = excluded.software_ids,
 		   site_ids = excluded.site_ids,
 		   updated_at = excluded.updated_at`,
-		item.ID, item.Name, item.Description,
+		item.ID, item.Name, item.Description, item.Category,
 		encodeStringArray(item.SoftwareIDs), encodeStringArray(item.SiteIDs),
 		item.CreatedAt, item.UpdatedAt)
 	if err != nil {

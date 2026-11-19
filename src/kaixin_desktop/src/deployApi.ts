@@ -227,6 +227,7 @@ export async function cancelDeploy(): Promise<{ state: string }> {
 // ---------- 自定义技能（落本地库，见 docs/08 第 11 节） ----------
 
 export interface CustomSkillRecord {
+  category?: string;
   id: string;
   name: string;
   description: string;
@@ -250,6 +251,7 @@ export async function saveCustomSkill(input: {
   id?: string;
   name: string;
   description: string;
+  category?: string;
   softwareIds: string[];
   siteIds: string[];
 }): Promise<CustomSkillRecord> {
