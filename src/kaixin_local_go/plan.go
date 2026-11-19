@@ -278,7 +278,6 @@ func (a *App) handlePlan(w http.ResponseWriter, r *http.Request) {
 		Skills           []SkillSelection `json:"skills"`
 		ExtraSoftwareIDs []string         `json:"extraSoftwareIds"`
 		SiteIDs          []string         `json:"siteIds"`
-		Mode             string           `json:"mode"` // existing / upgrade
 	}
 	if err := decodeJSON(r, &request); err != nil {
 		fail(w, http.StatusBadRequest, "请求格式错误")
@@ -294,9 +293,6 @@ func (a *App) handlePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	plan.AuthSteps = buildAuthSteps(a.sites, request.SiteIDs, a.authDir)
-	// 「AI 技能 + 硬件配置」模式：额外给出按技能反推的推荐硬件。
-	if request.Mode == "upgrade" {
-	}
 	writeJSON(w, http.StatusOK, plan)
 }
 

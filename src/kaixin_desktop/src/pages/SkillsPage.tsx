@@ -147,10 +147,18 @@ function pendingHint(step: DeployStepStatus): string {
 export function SkillsPage({ onNotice }: Props) {
   const [skills, setSkills] = usePersistentState<SkillOption[]>("kaixin.skills.v2", SKILLS);
   const [selected, setSelected] = useState<string[]>(["kb", "office"]);
-  const [scopeSummary, setScopeSummary] = useState<{ scenarios: string[]; skills: number; deps: number }>({
+  const [scopeSummary, setScopeSummary] = useState<{
+    scenarios: string[];
+    skills: number;
+    deps: number;
+    skillTexts: string[];
+    siteNames: string[];
+  }>({
     scenarios: [],
     skills: 0,
-    deps: 0
+    deps: 0,
+    skillTexts: [],
+    siteNames: []
   });
 
   const [hwState, setHwState] = useState<"detecting" | "ready" | "failed">("detecting");
@@ -255,7 +263,7 @@ export function SkillsPage({ onNotice }: Props) {
     return () => setDeploying(false);
   }, [job]);
 
-  // FR-SYS-04：部署结束与失败用中文播报（开关在系统设置里，默认关闭）
+  // FR-SYS-04：部署结束与失败用中文播报（开关在系统设置里，默认开启）
   const spokenStateRef = useRef<string>("");
   useEffect(() => {
     if (!job) {
@@ -508,8 +516,8 @@ export function SkillsPage({ onNotice }: Props) {
     if (scopeSummary.scenarios.length === 0) {
       onNotice("还没有选业务场景，方案只按软件目录生成。建议先在上方选场景。");
     }
-    if (selected.length === 0) {
-      const message = "请至少选择一项技能，再生成方案。";
+    if (selected.length === 0 && scopeSummary.scenarios.length === 0) {
+      const message = "请至少选择一项技能或一个业务场景，再生成方案。";
       setPlanError(message);
       onNotice(message);
       return;
@@ -519,6 +527,23 @@ export function SkillsPage({ onNotice }: Props) {
     try {
       const selections = [];
       const siteIds = new Set<string>();
+      // 已选业务场景：把细分技能文本送去做软件匹配，命中的软件与网站并入方案。
+      const scenarioSoftwareIds = new Set<string>();
+      if (scopeSummary.skillTexts.length > 0) {
+        try {
+          const matched = await matchSoftware(scopeSummary.skillTexts.join("；"));
+          matched.lines.forEach((line) => {
+            if (line.softwareId) {
+              scenarioSoftwareIds.add(line.softwareId);
+            }
+            if (line.siteId) {
+              siteIds.add(line.siteId);
+            }
+          });
+        } catch {
+          // 匹配服务不可用时不影响已选技能生成方案
+        }
+      }
       for (const skill of skills.filter((item) => selected.includes(item.id))) {
         let matches = skill.matches;
         if ((!matches || matches.length === 0) && skill.content?.trim()) {
@@ -534,7 +559,7 @@ export function SkillsPage({ onNotice }: Props) {
         const ids = [...new Set((matches ?? []).filter((line) => line.softwareId).map((line) => line.softwareId))];
         selections.push({ id: skill.id, name: skill.name, softwareIds: ids });
       }
-      const result = await buildPlan(selections, extraIds, [...siteIds]);
+      const result = await buildPlan(selections, [...new Set([...extraIds, ...scenarioSoftwareIds])], [...siteIds]);
       setPlan(result);
       setJob(null);
 
@@ -804,7 +829,7 @@ export function SkillsPage({ onNotice }: Props) {
           </div>
           <div className="row" style={{ marginTop: 14 }}>
             <button type="button" className="primary-btn" onClick={() => setConfirming(true)}>
-              部署方案
+              开始部署
             </button>
             <button type="button" className="secondary-btn" onClick={() => void generate()} disabled={planning}>
               重新生成
@@ -875,11 +900,15 @@ export function SkillsPage({ onNotice }: Props) {
       {resultOpen && job && (
         <div className="dialog-mask" onClick={() => setResultOpen(false)}>
           <div className="dialog" onClick={(event) => event.stopPropagation()}>
-            <h2 className="dialog-title">{job.state === "failed" ? "部署未完成" : "部署完成"}</h2>
+            <h2 className="dialog-title">
+              {job.state === "failed" ? "部署未完成" : job.state === "cancelled" ? "部署已取消" : "部署完成"}
+            </h2>
             <p className="caption" style={{ marginTop: 6 }}>
               {job.state === "failed"
                 ? "部分软件安装失败，请查看下方步骤与日志后重新部署。"
-                : "全部软件已安装完成，现在可以使用对应技能了。"}
+                : job.state === "cancelled"
+                  ? "部署已按你的要求取消。已完成的步骤保留在本机，可在「部署历史」里续装或单步重试。"
+                  : "全部软件已安装完成，现在可以使用对应技能了。"}
             </p>
             <div className="plan-steps" style={{ marginTop: 12 }}>
               {job.steps.map((step) => (
@@ -1014,6 +1043,9 @@ export function SkillsPage({ onNotice }: Props) {
             <h2 className="dialog-title">确认部署到本机</h2>
             <p className="caption" style={{ marginTop: 6 }}>
               将下载便携包并解压到 %LOCALAPPDATA%\Kaixin\runtime，不需要管理员权限，不修改系统环境变量。
+            </p>
+            <p className="caption" style={{ marginTop: 4 }}>
+              共 {plan.steps.length} 步 · 总大小 {(plan.totalSizeMb / 1024).toFixed(1)} GB · 预计约 {plan.estimatedMinutes} 分钟
             </p>
             {plan.warnings.map((warning) => (
               <div className="plan-warning" key={warning}>⚠ {warning}</div>

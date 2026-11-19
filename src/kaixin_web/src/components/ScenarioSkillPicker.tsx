@@ -82,7 +82,15 @@ function buildCustomScenario(skill: CustomSkill) {
 
 interface Props {
   onNotice: (message: string) => void;
-  onSelectionChange?: (summary: { scenarios: string[]; skills: number; deps: number }) => void;
+  onSelectionChange?: (summary: {
+    scenarios: string[];
+    skills: number;
+    deps: number;
+    /** 已选场景下的细分技能文本，用于生成方案时做软件匹配 */
+    skillTexts: string[];
+    /** 已选场景需要的网站名称，用于解析授权站点 */
+    siteNames: string[];
+  }) => void;
   /** L1 大框右上角的操作（新增技能） */
   action?: React.ReactNode;
   /** 用户自建的技能（id 以 custom- 开头），显示在场景下方 */
@@ -357,16 +365,27 @@ export function ScenarioSkillPicker({
     }
     let skills = 0;
     let deps = 0;
+    const skillTexts: string[] = [];
+    const siteNames = new Set<string>();
     for (const category of SCENARIO_TREE) {
       for (const scenario of category.scenarios) {
         if (!scope.selected.includes(scenarioKey(category.name, scenario.name))) {
           continue;
         }
         skills += scenario.skills.length;
-        deps += depsOfScenario(category.name, scenario, scope).size;
+        const scenarioDeps = depsOfScenario(category.name, scenario, scope);
+        deps += scenarioDeps.size;
+        for (const skill of scenario.skills) {
+          skillTexts.push(`${skill.name}。${skill.desc}`);
+        }
+        for (const dep of scenarioDeps.values()) {
+          if (dep.type === "网站平台") {
+            siteNames.add(dep.name);
+          }
+        }
       }
     }
-    onSelectionChange({ scenarios: scope.selected, skills, deps });
+    onSelectionChange({ scenarios: scope.selected, skills, deps, skillTexts, siteNames: [...siteNames] });
   }, [scope, onSelectionChange]);
 
   const toggleScenario = useCallback((category: string, scenario: string) => {
@@ -711,7 +730,12 @@ export function ScenarioSkillPicker({
         {editDialogNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">选择业务场景</h2>
-          {action}
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <span className={`tag${scope.selected.length > 0 ? " accent" : ""}`}>
+              已选 {scope.selected.length} 项
+            </span>
+            {action}
+          </div>
         </div>
         <div className="scope-groups">
         {SCENARIO_TREE.map((category) => (

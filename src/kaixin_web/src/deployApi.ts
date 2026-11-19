@@ -50,7 +50,7 @@ export interface PlanStep {
   order: number;
   softwareId: string;
   name: string;
-  action: "extract" | "pull-model" | "manual";
+  action: "extract" | "pull-model" | "cloud" | "manual";
   sizeMb: number;
   url?: string;
   requires: string[];
@@ -68,7 +68,7 @@ export interface PlanSiteAuth {
   authorized: boolean;
 }
 
-// 「AI 技能 + 硬件配置」模式按所选技能反推的推荐硬件。
+// 部署方案：软件步骤 + 网站授权步骤 + 体积与耗时预估。
 export interface DeployPlan {
   steps: PlanStep[];
   authSteps: PlanSiteAuth[];

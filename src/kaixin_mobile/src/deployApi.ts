@@ -50,7 +50,7 @@ export interface PlanStep {
   order: number;
   softwareId: string;
   name: string;
-  action: "extract" | "pull-model" | "manual";
+  action: "extract" | "pull-model" | "cloud" | "manual";
   sizeMb: number;
   url?: string;
   requires: string[];
@@ -68,21 +68,13 @@ export interface PlanSiteAuth {
   authorized: boolean;
 }
 
-// 「AI 技能 + 硬件配置」模式按所选技能反推的推荐硬件。
-export interface HardwareRecommendation {
-  minMemoryGb: number;
-  minVramGb: number;
-  needDiskGb: number;
-  items: string[];
-}
-
+// 部署方案：软件步骤 + 网站授权步骤 + 体积与耗时预估。
 export interface DeployPlan {
   steps: PlanStep[];
   authSteps: PlanSiteAuth[];
   totalSizeMb: number;
   estimatedMinutes: number;
   warnings: string[];
-  recommendation?: HardwareRecommendation;
 }
 
 export interface DeployStepStatus {
@@ -104,7 +96,7 @@ export interface DeployStepStatus {
 
 export interface DeployJob {
   id: string;
-  state: "running" | "done" | "failed";
+  state: "running" | "done" | "failed" | "cancelled";
   startedAt: string;
   finishedAt?: string;
   logPath: string;
@@ -167,12 +159,11 @@ export function fetchCatalog(): Promise<SoftwareEntry[]> {
 export function buildPlan(
   skills: SkillSelection[],
   extraSoftwareIds: string[],
-  siteIds: string[] = [],
-  mode: "existing" | "upgrade" = "existing"
+  siteIds: string[] = []
 ): Promise<DeployPlan> {
   return request<DeployPlan>("/api/deploy/plan", {
     method: "POST",
-    body: JSON.stringify({ skills, extraSoftwareIds, siteIds, mode })
+    body: JSON.stringify({ skills, extraSoftwareIds, siteIds })
   }, 40000);
 }
 
