@@ -219,10 +219,23 @@ export function SkillsPage({ onNotice }: Props) {
         if (records.length === 0) {
           return;
         }
-        setSkills((list) => [
-          ...list.filter((item) => !item.id.startsWith("custom-")),
-          ...records.map(toSkillOption)
-        ]);
+        // 以本地库为准：只保留内置种子 + 库里的记录，
+        // 并按「名称+内容」去重，清掉历史版本累积的重复副本。
+        setSkills(() => {
+          const seedIds = new Set(SKILLS.map((item) => item.id));
+          const base = SKILLS.filter((item) => seedIds.has(item.id));
+          const seen = new Set<string>();
+          const incoming = [];
+          for (const record of records.map(toSkillOption)) {
+            const key = record.name + "|" + (record.content ?? "");
+            if (seen.has(key)) {
+              continue;
+            }
+            seen.add(key);
+            incoming.push(record);
+          }
+          return [...base, ...incoming];
+        });
       })
       .catch(() => undefined);
   }, [detect, setSkills]);
@@ -304,6 +317,48 @@ export function SkillsPage({ onNotice }: Props) {
     } catch (error) {
       onNotice(error instanceof Error ? error.message : "取消失败");
     }
+  };
+
+  // 自建技能：凡是不在内置种子里的都算（含早期版本用 custom- / skill- 前缀存的）
+  const builtinIds = new Set(SKILLS.map((item) => item.id));
+  const seenCustom = new Set<string>();
+  const customSkillsForPicker = skills
+    .filter((skill) => !builtinIds.has(skill.id))
+    .filter((skill) => {
+      // 展示层再兜一层：同名只留一条
+      if (seenCustom.has(skill.name)) {
+        return false;
+      }
+      seenCustom.add(skill.name);
+      return true;
+    })
+    .map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      demand: skill.demand
+    }));
+
+  const toggleCustomSkill = (id: string) => {
+    setPlan(null);
+    setSelected((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [id, ...current]
+    );
+  };
+
+  const editCustomSkill = (id: string) => {
+    const target = skills.find((item) => item.id === id);
+    if (target) {
+      openEdit(target);
+    }
+  };
+
+  const openEdit = (skill: SkillOption) => {
+    setEditing(skill);
+    setDraft({ name: skill.name, content: skill.content ?? "" });
+    setDraftMatches([]);
+    setDraftNotice(null);
+    setDialogOpen(true);
   };
 
   const openCreate = () => {
@@ -554,6 +609,10 @@ export function SkillsPage({ onNotice }: Props) {
       <ScenarioSkillPicker
         onNotice={onNotice}
         onSelectionChange={setScopeSummary}
+        customSkills={customSkillsForPicker}
+        selectedCustom={selected}
+        onToggleCustom={toggleCustomSkill}
+        onEditCustom={editCustomSkill}
         action={
           <button type="button" className="ghost-btn" onClick={openCreate}>
             + 新增技能

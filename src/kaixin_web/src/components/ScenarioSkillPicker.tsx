@@ -22,6 +22,13 @@ import {
 //   · L2 同样的框，但只展示细分技能，不提供勾选/选择功能
 //   · L3 同样的框，展示依赖并可编辑
 
+interface CustomSkill {
+  id: string;
+  name: string;
+  description: string;
+  demand: number;
+}
+
 interface Props {
   onNotice: (message: string) => void;
   onSelectionChange?: (summary: { scenarios: string[]; skills: number; deps: number }) => void;
@@ -29,6 +36,12 @@ interface Props {
   footer?: React.ReactNode;
   /** L1 大框右上角的操作（新增技能） */
   action?: React.ReactNode;
+  /** 用户自建的技能（id 以 custom- 开头），显示在场景下方 */
+  customSkills?: CustomSkill[];
+  /** 已选中的自定义技能 id */
+  selectedCustom?: string[];
+  onToggleCustom?: (id: string) => void;
+  onEditCustom?: (id: string) => void;
 }
 
 interface ScopeState {
@@ -71,7 +84,16 @@ const STATUS_CLASS: Record<DependencyStatus, string> = {
   需授权: "dep-auth"
 };
 
-export function ScenarioSkillPicker({ onNotice, onSelectionChange, footer, action }: Props) {
+export function ScenarioSkillPicker({
+  onNotice,
+  onSelectionChange,
+  footer,
+  action,
+  customSkills = [],
+  selectedCustom = [],
+  onToggleCustom,
+  onEditCustom
+}: Props) {
   const [scope, setScope] = useState<ScopeState>(() => loadScope());
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [activeCategory, setActiveCategory] = useState("");
@@ -300,6 +322,52 @@ export function ScenarioSkillPicker({ onNotice, onSelectionChange, footer, actio
             </div>
           </section>
         ))}
+
+        {customSkills.length > 0 && (
+          <section className="scope-group">
+            <h3 className="scope-group-title">自定义技能</h3>
+            <div className="scenario-grid">
+              {customSkills.map((skill) => {
+                const active = selectedCustom.includes(skill.id);
+                return (
+                  <div
+                    key={skill.id}
+                    className={`scenario-card${active ? " selected" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onToggleCustom?.(skill.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onToggleCustom?.(skill.id);
+                      }
+                    }}
+                  >
+                    <div className="scenario-text">
+                      <span className="scenario-name">
+                        {active && <span className="scenario-tick">✓</span>}
+                        {skill.name}
+                      </span>
+                      <span className="scenario-meta">
+                        {(skill.description || "自建技能").slice(0, 14)} · 能力 Lv.{skill.demand}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="scenario-edit"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEditCustom?.(skill.id);
+                      }}
+                    >
+                      修改
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
         </div>
         {footer && <div className="scope-supplement">{footer}</div>}
       </section>
