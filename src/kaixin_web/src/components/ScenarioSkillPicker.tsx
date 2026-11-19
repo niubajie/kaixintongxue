@@ -131,14 +131,6 @@ function loadScope(): ScopeState {
   }
 }
 
-/** 去掉纯括号行（[软件][网站]），这些只是匹配结果，不参与保存 */
-function stripBrackets(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => !/^(\s*\[[^\]]*\])+\s*$/.test(line))
-    .join("\n");
-}
-
 const STATUS_CLASS: Record<DependencyStatus, string> = {
   已就绪: "dep-ok",
   待接入: "dep-warn",
@@ -217,8 +209,9 @@ export function ScenarioSkillPicker({
 
   // L2「编辑」弹窗：列出全部技能细分与依赖，底部可跑 AI 技能匹配
   const [editOpen, setEditOpen] = useState(false);
-  const [draftText, setDraftText] = useState("");
-  const [initialText, setInitialText] = useState("");
+  const [draftLines, setDraftLines] = useState<string[]>([]);
+  const [initialLines, setInitialLines] = useState<string[]>([]);
+  const [matches, setMatches] = useState<{ text: string; software?: string; site?: string }[]>([]);
   const [matching, setMatching] = useState(false);
   // 内置场景的编辑结果存本地（Excel 是只读数据源）
   const [skillOverrides, setSkillOverrides] = useState<
@@ -524,28 +517,19 @@ export function ScenarioSkillPicker({
       : [];
 
   const runSkillMatch = async () => {
-    if (activeSkills.length === 0) {
+    const content = draftLines.map((line) => line.trim()).filter(Boolean).join("\n");
+    if (!content) {
       return;
     }
     setMatching(true);
     try {
-      const content = stripBrackets(draftText).trim();
       const result = await matchSoftware(content);
-      const lines = result.lines ?? [];
-      // 把 [软件][网站] 直接写回输入框，每条要求下面跟一行，页面不再增高
-      const next = content
-        .split("\n")
-        .map((raw) => raw.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const hit = lines.find((item) => item.text.trim() === line);
-          const bracket = hit
-            ? `[${hit.software ?? "无软件"}]${hit.site ? `[${hit.site}]` : ""}`
-            : "[无软件]";
-          return `${line}\n${bracket}`;
-        })
-        .join("\n");
-      setDraftText(next);
+      const lines = (result.lines ?? []).map((line) => ({
+        text: line.text,
+        software: line.software,
+        site: line.site
+      }));
+      setMatches(lines);
       if (lines.length === 0) {
         onNotice("没有匹配到软件，可到依赖页手动导入。");
       }
@@ -557,19 +541,17 @@ export function ScenarioSkillPicker({
   };
 
   const openEditDialog = () => {
-    const text = activeSkills.map((skill) => skill.desc || skill.name).join("\n");
-    setDraftText(text);
-    setInitialText(text);
+    const lines = activeSkills.map((skill) => skill.desc || skill.name);
+    setDraftLines(lines);
+    setInitialLines(lines);
+    setMatches([]);
     setEditOpen(true);
   };
 
   const saveEdits = () => {
-    const cleaned = stripBrackets(draftText)
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const cleaned = draftLines.map((line) => line.trim()).filter(Boolean);
     if (activeCustom) {
-      onUpdateCustomContent?.(activeCustom.id, cleaned.join("\\n"));
+      onUpdateCustomContent?.(activeCustom.id, cleaned.join("\n"));
       setEditOpen(false);
       onNotice("已保存技能细分。");
       return;
@@ -603,18 +585,45 @@ export function ScenarioSkillPicker({
       >
         <h2 className="dialog-title">编辑 · {activeCustom ? activeCustom.name : activeScenario}</h2>
         <p className="caption" style={{ marginTop: 6 }}>
-          一行一条技能要求，回车换行；删掉整行即移除该条。改完点「保存」。
+          一行一条技能要求，回车可新增一行；删掉整行即移除该条。改完点「保存」。
         </p>
 
-        <textarea
-          className="textarea"
-          style={{ marginTop: 10, minHeight: 220, fontFamily: "inherit", lineHeight: 1.7 }}
-          value={draftText}
-          placeholder={"采集规格、价格与供应商信息。\n汇总竞品销量与评价趋势。"}
-          onChange={(event) => {
-            setDraftText(event.target.value);
+        <div className="edit-lines">
+          {draftLines.map((line, index) => {
+            const hit = matches.find((item) => item.text.trim() === line.trim());
+            return (
+              <div key={`line-${index}`} className="edit-line">
+                <input
+                  className="edit-line-input"
+                  value={line}
+                  placeholder="输入技能要求，回车新增一行"
+                  onChange={(event) => {
+                    const next = [...draftLines];
+                    next[index] = event.target.value;
+                    setDraftLines(next);
                   }}
-        />
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      const next = [...draftLines];
+                      next.splice(index + 1, 0, "");
+                      setDraftLines(next);
+                    } else if (event.key === "Backspace" && line === "" && draftLines.length > 1) {
+                      event.preventDefault();
+                      setDraftLines(draftLines.filter((_, i) => i !== index));
+                    }
+                  }}
+                />
+                {hit && (
+                  <span className="edit-line-tag">
+                    [{hit.software ?? "无软件"}]
+                    {hit.site ? `[${hit.site}]` : ""}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
         <div className="row" style={{ marginTop: 6 }}>
           <span
@@ -631,10 +640,11 @@ export function ScenarioSkillPicker({
                 delete next[key];
                 return next;
               });
-              const original = (currentScenario?.skills ?? []).map((skill) => skill.desc || skill.name).join("\n");
-              setDraftText(original);
-              setInitialText(original);
-                        onNotice("已恢复默认内容，点「保存」生效。");
+              const original = (currentScenario?.skills ?? []).map((skill) => skill.desc || skill.name);
+              setDraftLines(original);
+              setInitialLines(original);
+              setMatches([]);
+              onNotice("已恢复默认内容，点「保存」生效。");
             }}
           >
             恢复默认内容
@@ -659,8 +669,7 @@ export function ScenarioSkillPicker({
             className="secondary-btn"
             style={{ minWidth: 120 }}
             onClick={saveEdits}
-            disabled={draftText === initialText}
-            title={draftText === initialText ? "内容没有改动" : "保存修改"}
+            disabled={draftLines.join("\n") === initialLines.join("\n")}
           >
             保存
           </button>

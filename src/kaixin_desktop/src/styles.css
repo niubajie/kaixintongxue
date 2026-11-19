@@ -1867,3 +1867,46 @@ input[type="range"] {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* L2 编辑页：一个框内多行，每行右侧跟 [软件][网站] */
+.edit-lines {
+  border: 1px solid #d7dae0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  min-height: 200px;
+  max-height: 46vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edit-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edit-line-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.edit-line-input::placeholder {
+  color: #b6bfb9;
+}
+
+.edit-line-tag {
+  flex: 0 0 auto;
+  color: #0f7b6c;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
