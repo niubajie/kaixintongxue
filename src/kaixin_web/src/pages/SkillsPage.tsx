@@ -152,7 +152,6 @@ export function SkillsPage({ onNotice }: Props) {
     skills: 0,
     deps: 0
   });
-  const [supplement, setSupplement] = useState("");
 
   const [hwState, setHwState] = useState<"detecting" | "ready" | "failed">("detecting");
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
@@ -646,18 +645,6 @@ export function SkillsPage({ onNotice }: Props) {
             + 新增技能
           </button>
         }
-        footer={
-          <>
-            <label className="field-label">补充需求（可选）</label>
-            <textarea
-              className="textarea"
-              rows={2}
-              placeholder="例如：希望全程离线运行，优先保证响应速度"
-              value={supplement}
-              onChange={(event) => setSupplement(event.target.value)}
-            />
-          </>
-        }
       />
 
       <div className="scope-actions">
@@ -679,7 +666,6 @@ export function SkillsPage({ onNotice }: Props) {
             <h2 className="section-title">部署方案 · 涉及软件与网站</h2>
             <span className="tag accent">共 {plan.steps.length} 步 · 预计下载 {(plan.totalSizeMb / 1024).toFixed(1)} GB · 约 {plan.estimatedMinutes} 分钟</span>
           </div>
-          {supplement.trim() && <p className="list-card-detail">补充需求：{supplement.trim()}</p>}
           {plan.warnings.map((warning) => (
             <div className="plan-warning" key={warning}>⚠ {warning}</div>
           ))}

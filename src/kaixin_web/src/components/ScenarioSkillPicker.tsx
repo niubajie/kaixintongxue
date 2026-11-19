@@ -82,8 +82,6 @@ function buildCustomScenario(skill: CustomSkill) {
 interface Props {
   onNotice: (message: string) => void;
   onSelectionChange?: (summary: { scenarios: string[]; skills: number; deps: number }) => void;
-  /** L1 大框底部的内容（补充需求） */
-  footer?: React.ReactNode;
   /** L1 大框右上角的操作（新增技能） */
   action?: React.ReactNode;
   /** 用户自建的技能（id 以 custom- 开头），显示在场景下方 */
@@ -139,7 +137,6 @@ const STATUS_CLASS: Record<DependencyStatus, string> = {
 export function ScenarioSkillPicker({
   onNotice,
   onSelectionChange,
-  footer,
   action,
   customSkills = [],
   selectedCustom = [],
@@ -530,7 +527,6 @@ export function ScenarioSkillPicker({
         )}
 
         </div>
-        {footer && <div className="scope-supplement">{footer}</div>}
       </section>
     );
   }
@@ -577,7 +573,6 @@ export function ScenarioSkillPicker({
             ))}
           </div>
         </div>
-        {footer && <div className="scope-supplement">{footer}</div>}
       </section>
     );
   }
@@ -620,7 +615,6 @@ export function ScenarioSkillPicker({
             )}
           </tbody>
         </table>
-        {footer && <div className="scope-supplement">{footer}</div>}
       </section>
     );
   }
@@ -694,7 +688,6 @@ export function ScenarioSkillPicker({
             </p>
           )}
         </div>
-        {footer && <div className="scope-supplement">{footer}</div>}
       </section>
     );
   }
@@ -833,7 +826,6 @@ export function ScenarioSkillPicker({
             </button>
           </div>
         )}
-        {footer && <div className="scope-supplement">{footer}</div>}
       </section>
     );
   }
