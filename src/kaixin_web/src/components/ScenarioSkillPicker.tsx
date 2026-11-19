@@ -653,7 +653,6 @@ export function ScenarioSkillPicker({
         {editDialogNode}
         <div className="scope-box-head">
           <h2 className="scope-box-title">选择业务场景</h2>
-          <span className="caption">双击卡片进入细分技能 · 右键可删除</span>
           {action}
         </div>
         <div className="scope-groups">

@@ -1498,9 +1498,13 @@ input[type="range"] {
 /* ---------- 业务场景卡片：浅灰绿底 + 右侧竖向居中按钮；选中变山青色并前移 ---------- */
 .scenario-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
-  gap: 14px;
-  margin-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+  border: 1px solid #d7dae0;
+  border-radius: 12px;
+  background: #fbfcfb;
+  padding: 12px;
 }
 
 .scenario-card {
