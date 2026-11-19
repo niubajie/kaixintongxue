@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setDeploying } from "../runtimeState";
 import { speak } from "../voice";
+import { ScenarioSkillPicker } from "../components/ScenarioSkillPicker";
 import { usePersistentState } from "../assistant";
 import { SKILLS, type SkillOption } from "../data";
 import {
@@ -142,6 +143,11 @@ function pendingHint(step: DeployStepStatus): string {
 export function SkillsPage({ onNotice }: Props) {
   const [skills, setSkills] = usePersistentState<SkillOption[]>("kaixin.skills.v2", SKILLS);
   const [selected, setSelected] = useState<string[]>(["kb", "office"]);
+  const [scopeSummary, setScopeSummary] = useState<{ scenarios: string[]; skills: number; deps: number }>({
+    scenarios: [],
+    skills: 0,
+    deps: 0
+  });
   const [supplement, setSupplement] = useState("");
 
   const [hwState, setHwState] = useState<"detecting" | "ready" | "failed">("detecting");
@@ -300,24 +306,9 @@ export function SkillsPage({ onNotice }: Props) {
     }
   };
 
-  const toggleSkill = (skill: SkillOption) => {
-    setPlan(null);
-    setSelected((current) =>
-      current.includes(skill.id) ? current.filter((id) => id !== skill.id) : [skill.id, ...current]
-    );
-  };
-
   const openCreate = () => {
     setEditing(null);
     setDraft({ name: "", content: "" });
-    setDraftMatches([]);
-    setDraftNotice(null);
-    setDialogOpen(true);
-  };
-
-  const openEdit = (skill: SkillOption) => {
-    setEditing(skill);
-    setDraft({ name: skill.name, content: skill.content ?? "" });
     setDraftMatches([]);
     setDraftNotice(null);
     setDialogOpen(true);
@@ -504,10 +495,6 @@ export function SkillsPage({ onNotice }: Props) {
     }
   };
 
-  const orderedSkills = [...skills].sort(
-    (left, right) => Number(selected.includes(right.id)) - Number(selected.includes(left.id))
-  );
-
   return (
     <div className="page">
       <div className="page-head">
@@ -562,57 +549,17 @@ export function SkillsPage({ onNotice }: Props) {
       </div>
 
       <div className="row" style={{ justifyContent: "space-between", marginTop: 22 }}>
-        <h2 className="section-title">选择技能</h2>
+        <h2 className="section-title">选择业务场景</h2>
         <div className="row" style={{ gap: 10 }}>
-          <span className="caption">已选 {selected.length} 项</span>
+          <span className="caption">
+            {scopeSummary.scenarios.length} 个场景 · {scopeSummary.skills} 项技能 · {scopeSummary.deps} 个依赖
+          </span>
           <button type="button" className="secondary-btn" style={{ padding: "6px 12px" }} onClick={openCreate}>
             + 新增技能
           </button>
         </div>
       </div>
-      <div className="skill-grid">
-        {orderedSkills.map((skill) => {
-          const active = selected.includes(skill.id);
-          const siteUrls = [...new Set((skill.matches ?? []).filter((line) => line.siteUrl).map((line) => line.siteUrl as string))];
-          return (
-            <div
-              key={skill.id}
-              className={`skill-card${active ? " selected" : ""}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => toggleSkill(skill)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  toggleSkill(skill);
-                }
-              }}
-            >
-              <span className="skill-icon">{skill.icon}</span>
-              <span style={{ flex: 1 }}>
-                <span className="skill-name">{skill.name}</span>
-                <span className="skill-desc" style={{ display: "block" }}>{skill.description}</span>
-                {siteUrls.length > 0 && (
-                  <span className="caption" style={{ display: "block" }}>网址：{siteUrls.join("、")}</span>
-                )}
-              </span>
-              <span className="skill-side">
-                <span className="tag">{active ? "已选" : `能力 Lv.${skill.demand}`}</span>
-                <button
-                  type="button"
-                  className="skill-edit"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openEdit(skill);
-                  }}
-                >
-                  修改
-                </button>
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      <ScenarioSkillPicker onNotice={onNotice} onSelectionChange={setScopeSummary} />
 
       <label className="field-label">补充需求（可选）</label>
       <textarea
