@@ -505,15 +505,6 @@ export async function removeKnowledgeBase(path: string): Promise<void> {
   }
 }
 
-export async function searchKnowledgeBase(query: string): Promise<KBSearchHit[]> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/kb/search?q=${encodeURIComponent(query)}`);
-  if (!response.ok) {
-    throw new Error(`检索失败（HTTP ${response.status}）`);
-  }
-  const payload = (await response.json()) as { hits?: KBSearchHit[] };
-  return payload.hits ?? [];
-}
 
 
 // ---------- 语音转写（本地 Whisper） ----------
@@ -679,14 +670,6 @@ export async function testServer(): Promise<ServerTestResult> {
   return payload;
 }
 
-export async function checkUpdates(): Promise<UpdateCheckResult> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/update/check`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error(`检查更新失败（HTTP ${response.status}）`);
-  }
-  return (await response.json()) as UpdateCheckResult;
-}
 
 
 // ---------- 续装与单步重试（FR-SKL-18） ----------
@@ -912,10 +895,6 @@ export async function fetchDataInfo(): Promise<DataInfo> {
   return (await response.json()) as DataInfo;
 }
 
-export async function ackDataLocation(): Promise<void> {
-  const base = await getBaseUrl();
-  await fetch(`${base}/api/data/ack`, { method: "POST" });
-}
 
 export async function moveDataLocation(dir: string): Promise<string> {
   const base = await getBaseUrl();
@@ -1002,29 +981,7 @@ export async function testModel(): Promise<{ ok: boolean; message: string; reply
   return (await response.json()) as { ok: boolean; message: string; reply?: string; elapsedMs?: number };
 }
 
-export async function sendChat(messages: { role: string; content: string }[]): Promise<ChatResult> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages })
-  });
-  const payload = (await response.json().catch(() => null)) as (ChatResult & { message?: string }) | null;
-  if (!response.ok || !payload) {
-    throw new Error(payload?.message ?? `调用失败（HTTP ${response.status}）`);
-  }
-  return payload;
-}
 
-export async function fetchUsage(): Promise<UsageItem[]> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/chat/usage`);
-  if (!response.ok) {
-    throw new Error(`读取用量失败（HTTP ${response.status}）`);
-  }
-  const payload = (await response.json()) as { items?: UsageItem[] };
-  return payload.items ?? [];
-}
 
 
 export interface StreamMeta {

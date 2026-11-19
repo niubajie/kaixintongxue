@@ -1588,22 +1588,9 @@ input[type="range"] {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.scenario-edit {
-  flex: 0 0 auto;
-  border: 1px solid #dfe5df;
-  background: #fff;
-  border-radius: 999px;
-  padding: 6px 15px;
-  font-size: 12px;
-  color: #3c4a44;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
 
-.scenario-edit:hover {
-  border-color: #0f7b6c;
-  color: #0f7b6c;
-}
+
+
 
 .scenario-card.selected .scenario-edit {
   background: rgba(255, 255, 255, 0.16);
@@ -1616,38 +1603,15 @@ input[type="range"] {
   color: #fff;
 }
 
-.skill-scope-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
 
-.skill-scope-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--line);
-  padding: 14px 2px;
-  background: transparent;
-}
 
-.skill-scope-row:last-child {
-  border-bottom: none;
-}
 
-.skill-scope-row.off {
-  opacity: 0.55;
-}
 
-.skill-scope-main {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  cursor: pointer;
-  flex: 1;
-}
+
+
+
+
+
 
 .dep-table {
   width: 100%;
@@ -1731,13 +1695,7 @@ input[type="range"] {
   margin-top: 12px;
 }
 
-.scope-group-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
+
 
 .scope-group-title {
   font-size: 14px;
@@ -1746,11 +1704,7 @@ input[type="range"] {
   margin: 0;
 }
 
-.scope-supplement {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px dashed var(--line);
-}
+
 
 .scope-actions {
   display: flex;
@@ -1810,49 +1764,15 @@ input[type="range"] {
   background: #fdecea;
 }
 
-/* L2 编辑弹窗：技能细分列表 */
-.edit-skill-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-}
 
-.edit-skill-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fbfcfe;
-  font-size: 13px;
-}
 
-.edit-skill-index {
-  flex: 0 0 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--accent-light);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 600;
-}
 
-.edit-skill-text {
-  flex: 1;
-  line-height: 1.6;
-  word-break: break-word;
-}
 
-.edit-skill-match {
-  flex: 0 0 auto;
-  color: #0f7b6c;
-  font-size: 12px;
-  font-weight: 600;
-}
+
+
+
+
+
 
 /* 禁用状态的主按钮：变灰、不可点 */
 .primary-btn:disabled {
