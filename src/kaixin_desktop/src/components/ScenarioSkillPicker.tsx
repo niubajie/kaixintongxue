@@ -216,7 +216,15 @@ export function ScenarioSkillPicker({
   const [matching, setMatching] = useState(false);
   // 内置场景的编辑结果存本地（Excel 是只读数据源）
   const [skillOverrides, setSkillOverrides] = useState<
-    Record<string, { texts: Record<string, string>; extras: string[]; removed: string[] }>
+    Record<
+      string,
+      {
+        texts: Record<string, string>;
+        extras: string[];
+        removed: string[];
+        matches?: { text: string; software?: string; site?: string }[];
+      }
+    >
   >(() => {
     try {
       return JSON.parse(localStorage.getItem("kaixin.skillOverrides.v1") ?? "{}");
@@ -544,9 +552,12 @@ export function ScenarioSkillPicker({
 
   const openEditDialog = () => {
     const lines = activeSkills.map((skill) => skill.desc || skill.name);
+    const stored = activeCustom
+      ? []
+      : skillOverrides[scenarioKey(activeCategory, activeScenario)]?.matches ?? [];
     setDraftLines(lines);
     setInitialLines(lines);
-    setMatches([]);
+    setMatches(stored);
     setHasMatched(false);
     setEditOpen(true);
   };
@@ -574,7 +585,7 @@ export function ScenarioSkillPicker({
       }
     });
     const extras = cleaned.slice(base.length).filter(Boolean);
-    setSkillOverrides((current) => ({ ...current, [key]: { texts, extras, removed } }));
+    setSkillOverrides((current) => ({ ...current, [key]: { texts, extras, removed, matches } }));
     setEditOpen(false);
     onNotice("已保存技能细分。");
   };
