@@ -122,6 +122,8 @@ export interface SoftwareEntry {
   kind: string;
   sizeMb: number;
   note: string;
+  /** 服务端 catalog.json 里的匹配关键词，用于把技能/依赖名映射到软件 */
+  keywords?: string[];
 }
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 20000): Promise<T> {

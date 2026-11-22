@@ -90,6 +90,8 @@ interface Props {
     skillTexts: string[];
     /** 已选场景需要的网站名称，用于解析授权站点 */
     siteNames: string[];
+    /** 已选场景的全部依赖明细，用于生成方案时映射软件并列出未覆盖项 */
+    depItems: { name: string; type: string; status: string }[];
   }) => void;
   /** L1 大框右上角的操作（新增技能） */
   action?: React.ReactNode;
@@ -367,6 +369,7 @@ export function ScenarioSkillPicker({
     let deps = 0;
     const skillTexts: string[] = [];
     const siteNames = new Set<string>();
+    const depItems: { name: string; type: string; status: string }[] = [];
     for (const category of SCENARIO_TREE) {
       for (const scenario of category.scenarios) {
         if (!scope.selected.includes(scenarioKey(category.name, scenario.name))) {
@@ -382,10 +385,18 @@ export function ScenarioSkillPicker({
           if (dep.type === "网站平台") {
             siteNames.add(dep.name);
           }
+          depItems.push({ name: dep.name, type: dep.type, status: dep.status });
         }
       }
     }
-    onSelectionChange({ scenarios: scope.selected, skills, deps, skillTexts, siteNames: [...siteNames] });
+    onSelectionChange({
+      scenarios: scope.selected,
+      skills,
+      deps,
+      skillTexts,
+      siteNames: [...siteNames],
+      depItems
+    });
   }, [scope, onSelectionChange]);
 
   const toggleScenario = useCallback((category: string, scenario: string) => {

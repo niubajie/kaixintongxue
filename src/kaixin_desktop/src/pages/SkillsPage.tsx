@@ -144,22 +144,85 @@ function pendingHint(step: DeployStepStatus): string {
   return `文件大小 ${formatSize(step.totalBytes)} · 预计约 ${formatDuration(seconds)}`;
 }
 
+/** 依赖名 → 软件目录 id 的别名表。目录里只有 7 个条目，其余按名字/关键词兜底匹配。 */
+const SOFTWARE_ALIASES: Record<string, string> = {
+  ffmpeg: "ffmpeg",
+  "ffmpeg（音视频处理）": "ffmpeg",
+  ollama: "ollama",
+  "ollama（本地大模型）": "ollama",
+  whisper: "whisper",
+  "whisper.cpp": "whisper",
+  本地大模型: "ollama",
+  本地模型: "ollama",
+  大模型: "ollama",
+  本地视觉模型: "ollama",
+  剪辑与图片工具: "ffmpeg",
+  音视频处理工具: "ffmpeg",
+  视频剪辑工具: "ffmpeg",
+  语音识别引擎: "whisper",
+  语音转写工具: "whisper",
+  "qwen2.5": "qwen2.5-7b"
+};
+
+function normalizeName(value: string): string {
+  return value.trim().toLowerCase().replace(/[（）()\s·\-_/]/g, "");
+}
+
+/** 用目录条目的 id / 名称 / 关键词建索引，再按别名兜底 */
+function buildSoftwareIndex(entries: SoftwareEntry[]): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const entry of entries) {
+    index.set(normalizeName(entry.id), entry.id);
+    index.set(normalizeName(entry.name), entry.id);
+    for (const keyword of entry.keywords ?? []) {
+      const key = normalizeName(keyword);
+      if (key && !index.has(key)) {
+        index.set(key, entry.id);
+      }
+    }
+  }
+  return index;
+}
+
+function resolveSoftwareId(index: Map<string, string>, name: string): string | undefined {
+  const key = normalizeName(name);
+  const alias = SOFTWARE_ALIASES[name.trim()] ?? SOFTWARE_ALIASES[key];
+  if (alias) {
+    return alias;
+  }
+  if (index.has(key)) {
+    return index.get(key);
+  }
+  // 包含匹配：例如「FFmpeg 剪辑工具」命中 ffmpeg
+  for (const [candidate, id] of index) {
+    if (candidate.length >= 3 && (key.includes(candidate) || candidate.includes(key))) {
+      return id;
+    }
+  }
+  return undefined;
+}
+
 export function SkillsPage({ onNotice }: Props) {
   const [skills, setSkills] = usePersistentState<SkillOption[]>("kaixin.skills.v2", SKILLS);
-  const [selected, setSelected] = useState<string[]>(["kb", "office"]);
+  // 默认不预选任何技能：方案只反映用户真正勾选的场景与技能
+  const [selected, setSelected] = useState<string[]>([]);
   const [scopeSummary, setScopeSummary] = useState<{
     scenarios: string[];
     skills: number;
     deps: number;
     skillTexts: string[];
     siteNames: string[];
+    depItems: { name: string; type: string; status: string }[];
   }>({
     scenarios: [],
     skills: 0,
     deps: 0,
     skillTexts: [],
-    siteNames: []
+    siteNames: [],
+    depItems: []
   });
+  // 本次方案没覆盖到的依赖（网站、未收录的软件等），生成后展示，不静默丢弃
+  const [planNotes, setPlanNotes] = useState<string[]>([]);
 
   const [hwState, setHwState] = useState<"detecting" | "ready" | "failed">("detecting");
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
@@ -559,9 +622,34 @@ export function SkillsPage({ onNotice }: Props) {
         const ids = [...new Set((matches ?? []).filter((line) => line.softwareId).map((line) => line.softwareId))];
         selections.push({ id: skill.id, name: skill.name, softwareIds: ids });
       }
-      const result = await buildPlan(selections, [...new Set([...extraIds, ...scenarioSoftwareIds])], [...siteIds]);
+      // 已选场景声明的依赖：软件/模型映射到目录，网站走授权流程，映射不到的不静默丢弃
+      const depSoftwareIds = new Set<string>(scenarioSoftwareIds);
+      const uncovered: string[] = [];
+      if (scopeSummary.depItems.length > 0) {
+        const index = buildSoftwareIndex(catalog);
+        for (const dep of scopeSummary.depItems) {
+          if (dep.type === "网站平台") {
+            continue;
+          }
+          const id = resolveSoftwareId(index, dep.name);
+          if (id) {
+            depSoftwareIds.add(id);
+          } else {
+            const line = `${dep.name}（${dep.type}${dep.status === "已就绪" ? "" : " · " + dep.status}）`;
+            if (!uncovered.includes(line)) {
+              uncovered.push(line);
+            }
+          }
+        }
+      }
+      const result = await buildPlan(selections, [...new Set([...extraIds, ...depSoftwareIds])], [...siteIds]);
       setPlan(result);
       setJob(null);
+      setPlanNotes(
+        uncovered.length > 0
+          ? [`以下依赖没有对应的可安装软件，需要手动准备或到对应网站开通：${uncovered.join("、")}`]
+          : []
+      );
 
       // 需要访问网站的技能，逐条解析到具体页面（失败不影响方案）
       const guides: ResolveResult[] = [];
@@ -587,6 +675,7 @@ export function SkillsPage({ onNotice }: Props) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "生成方案失败";
       setPlan(null);
+      setPlanNotes([]);
       setPlanError(message);
       onNotice(message);
     } finally {
@@ -721,6 +810,11 @@ export function SkillsPage({ onNotice }: Props) {
           </div>
           {plan.warnings.map((warning) => (
             <div className="plan-warning" key={warning}>⚠ {warning}</div>
+          ))}
+          {planNotes.map((note) => (
+            <div className="plan-warning" key={note}>
+              ⚠ {note}
+            </div>
           ))}
           <div className="plan-steps">
             {plan.steps.map((step) => (
