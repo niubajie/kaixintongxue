@@ -39,6 +39,54 @@ func TestMaskPhone(t *testing.T) {
 	}
 }
 
+func TestPickCurrentVersion(t *testing.T) {
+	cases := []struct {
+		name         string
+		published    []Version
+		wantCurrent  string
+		wantPrevious string
+	}{
+		{
+			name:         "最新发布版本就是当前版本",
+			published:    []Version{{Version: "1.2.0", IsCurrent: true}, {Version: "1.1.0"}, {Version: "1.0.0"}},
+			wantCurrent:  "1.2.0",
+			wantPrevious: "1.1.0",
+		},
+		{
+			name:         "回滚后当前版本不是列表第一条",
+			published:    []Version{{Version: "1.2.0"}, {Version: "1.1.0", IsCurrent: true}, {Version: "1.0.0"}},
+			wantCurrent:  "1.1.0",
+			wantPrevious: "1.0.0",
+		},
+		{
+			name:        "当前版本已是最旧版本",
+			published:   []Version{{Version: "1.2.0"}, {Version: "1.1.0"}, {Version: "1.0.0", IsCurrent: true}},
+			wantCurrent: "1.0.0",
+		},
+		{
+			name:      "没有当前版本",
+			published: []Version{{Version: "1.1.0"}, {Version: "1.0.0"}},
+		},
+		{
+			name: "空列表",
+		},
+	}
+	for _, item := range cases {
+		current, previous := pickCurrentVersion(item.published)
+		gotCurrent, gotPrevious := "", ""
+		if current != nil {
+			gotCurrent = current.Version
+		}
+		if previous != nil {
+			gotPrevious = previous.Version
+		}
+		if gotCurrent != item.wantCurrent || gotPrevious != item.wantPrevious {
+			t.Fatalf("%s：current=%q previous=%q，期望 current=%q previous=%q",
+				item.name, gotCurrent, gotPrevious, item.wantCurrent, item.wantPrevious)
+		}
+	}
+}
+
 func TestVersionPattern(t *testing.T) {
 	if !versionPattern.MatchString("1.0.0") {
 		t.Fatal("合法版本号被拒绝")
