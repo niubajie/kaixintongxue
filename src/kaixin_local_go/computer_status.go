@@ -44,7 +44,9 @@ func (a *App) handleComputerStatus(w http.ResponseWriter, r *http.Request) {
 	// 硬盘显示「数据库所在盘」，不是写死的 C:。
 	// 数据目录换到 D: 时，这里也要跟着变。
 	wantDrive := driveOf(a.dataDir)
-	if hw, err := detectHardware(r.Context()); err == nil && hw != nil {
+	// 走 hardwareSnapshot 的 10 分钟缓存：本接口每 15 秒被前端轮询一次，
+	// 直接调 detectHardware 会每次都拉起 PowerShell 跑 WMI，造成后台空转。
+	if hw, _, err := hardwareSnapshot(r.Context(), false); err == nil && hw != nil {
 		status.MemTotalGb = hw.MemoryTotalGb
 		status.MemFreeGb = hw.MemoryFreeGb
 		for _, disk := range hw.Disks {

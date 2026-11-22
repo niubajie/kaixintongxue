@@ -26,7 +26,9 @@ type AutostartState struct {
 // queryAutostart 读取当前启动项。
 func queryAutostart() AutostartState {
 	state := AutostartState{KeyPath: autostartRunKey}
-	out, err := exec.Command("reg", "query", autostartRunKey, "/v", autostartValueName).Output()
+	cmd := exec.Command("reg", "query", autostartRunKey, "/v", autostartValueName)
+	hideConsole(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		state.Message = "未设置开机启动"
 		return state
@@ -49,6 +51,7 @@ func queryAutostart() AutostartState {
 func setAutostart(exePath string, enabled bool) error {
 	if !enabled {
 		cmd := exec.Command("reg", "delete", autostartRunKey, "/v", autostartValueName, "/f")
+		hideConsole(cmd)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			text := string(out)
 			// 值本来就不存在时不算失败
@@ -71,6 +74,7 @@ func setAutostart(exePath string, enabled bool) error {
 	value := fmt.Sprintf("\"%s\"", exePath)
 	cmd := exec.Command("reg", "add", autostartRunKey, "/v", autostartValueName,
 		"/t", "REG_SZ", "/d", value, "/f")
+	hideConsole(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("写入启动项失败: %v %s", err, truncate(string(out), 160))
 	}

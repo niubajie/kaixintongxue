@@ -143,6 +143,7 @@ func transcribe(ctx context.Context, audio []byte, language string) (ASRResult, 
 	ff := exec.CommandContext(ffCtx, status.FFmpegPath,
 		"-y", "-hide_banner", "-loglevel", "error",
 		"-i", srcPath, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wavPath)
+	hideConsole(ff)
 	if out, err := ff.CombinedOutput(); err != nil {
 		return ASRResult{}, fmt.Errorf("音频转码失败: %v %s", err, truncate(string(out), 200))
 	}
@@ -157,6 +158,7 @@ func transcribe(ctx context.Context, audio []byte, language string) (ASRResult, 
 		"-t", "4",
 		"-nt",
 		"-oj")
+	hideConsole(cmd)
 	cmd.Dir = filepath.Dir(status.WhisperPath) // DLL 与可执行文件同目录
 	out, err := cmd.CombinedOutput()
 	if asrCtx.Err() == context.DeadlineExceeded {

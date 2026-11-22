@@ -149,6 +149,7 @@ var runHardwareScript = func(ctx context.Context) ([]byte, error) {
 	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(execCtx, "powershell", "-NoProfile", "-NonInteractive", "-Command", hardwareScript)
+	hideConsole(cmd)
 	return cmd.Output()
 }
 
