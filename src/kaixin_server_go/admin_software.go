@@ -53,15 +53,34 @@ func (a *App) buildSoftwareDTO(r *http.Request, software Software) SoftwareDTO {
 			published = append(published, version)
 		}
 	}
-	if len(published) > 0 {
-		current := toVersionDTO(published[0])
-		dto.Current = &current
+	// 必须按 is_current 取「当前版本」：回滚后最新发布的版本已不是对外下载版本，
+	// 若按列表第一条取，管理后台会显示错误的当前版本。
+	current, previous := pickCurrentVersion(published)
+	if current != nil {
+		currentDTO := toVersionDTO(*current)
+		dto.Current = &currentDTO
 	}
-	if len(published) > 1 {
-		previous := toVersionDTO(published[1])
-		dto.Previous = &previous
+	if previous != nil {
+		previousDTO := toVersionDTO(*previous)
+		dto.Previous = &previousDTO
 	}
 	return dto
+}
+
+// pickCurrentVersion 从已发布版本列表中挑出对外下载版本（is_current）与它的上一个版本（回滚目标）。
+// 列表需按发布时间倒序（最新在前）；没有标记 is_current 时两个返回值都为 nil。
+func pickCurrentVersion(published []Version) (current *Version, previous *Version) {
+	for index := range published {
+		if !published[index].IsCurrent {
+			continue
+		}
+		current = &published[index]
+		if index+1 < len(published) {
+			previous = &published[index+1]
+		}
+		return current, previous
+	}
+	return nil, nil
 }
 
 func (a *App) handleSoftwareList(w http.ResponseWriter, r *http.Request) {

@@ -201,11 +201,13 @@ func (a *App) handleRollback(w http.ResponseWriter, r *http.Request) {
 			published = append(published, version)
 		}
 	}
-	if len(published) < 2 {
+	// 回滚目标必须是「当前版本」的前一个版本；若按列表第二条取，
+	// 当前版本已不是最新发布版本时会回滚到错误版本（甚至原地不动）。
+	_, target := pickCurrentVersion(published)
+	if target == nil {
 		fail(w, http.StatusBadRequest, "没有可回滚的历史版本。")
 		return
 	}
-	target := published[1]
 	if err := a.setCurrentVersion(ctx, softwareID, target.ID); err != nil {
 		fail(w, http.StatusInternalServerError, "回滚失败。")
 		return
