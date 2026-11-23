@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"unicode/utf8"
 )
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -18,6 +19,20 @@ func fail(w http.ResponseWriter, status int, message string) {
 
 func decodeJSON(r *http.Request, target any) error {
 	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, 4<<20)).Decode(target)
+}
+
+func truncate(text string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if len(text) <= max {
+		return text
+	}
+	end := max
+	for end > 0 && !utf8.ValidString(text[:end]) {
+		end--
+	}
+	return text[:end]
 }
 
 // originAllowed 只放行本机页面与 Tauri / Capacitor 壳的来源。

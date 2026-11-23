@@ -2,28 +2,20 @@ import { useEffect, useState } from "react";
 import { ComputerStatusBar } from "./components/ComputerStatusBar";
 import { HomePage } from "./pages/HomePage";
 import { ApplicationPage } from "./pages/ApplicationPage";
-import { GoalPage } from "./pages/GoalPage";
-import { LearningPage } from "./pages/LearningPage";
 import { LibraryPage } from "./pages/LibraryPage";
-import { SkillsPage } from "./pages/SkillsPage";
 import { SystemPage } from "./pages/SystemPage";
 import { UpdatePage } from "./pages/UpdatePage";
-import { HistoryPage } from "./pages/HistoryPage";
+import { VoicePage } from "./pages/VoicePage";
 import { bridge } from "./platform";
-import { ConfirmDialog } from "./components/ConfirmDialog";
-import { isDeploying } from "./runtimeState";
-import { cancelDeploy } from "./deployApi";
 import type { PageKey } from "./data";
 
 const NAV: { key: PageKey; label: string; icon: string }[] = [
   { key: "home", label: "新建任务", icon: "\uE710" },
   { key: "application", label: "应用助手", icon: "\uE8A9" },
-  { key: "goal", label: "目标助手", icon: "\uE71D" },
-  { key: "learning", label: "学习助手", icon: "\uE82D" },
   { key: "library", label: "本地资料", icon: "\uE8F1" },
-  { key: "skills", label: "技能部署", icon: "\uE90F" },
   { key: "system", label: "系统设置", icon: "\uE713" },
-  { key: "update", label: "版本更新", icon: "\uE777" }
+  { key: "update", label: "版本更新", icon: "\uE777" },
+  { key: "voice", label: "实时语音", icon: "\uE720" }
 ];
 
 // 演示入口只在开发构建出现：正式包不打包该入口（决策 Q-05）
@@ -32,12 +24,9 @@ const DEMO_MODE = import.meta.env.DEV;
 export default function App() {
   const [page, setPage] = useState<PageKey>("home");
   const [notice, setNotice] = useState(
-    DEMO_MODE
-      ? "方案为演示数据；点击部署会执行真实环境检测与软件安装。"
-      : "点击「技能部署」可选择技能并生成方案。"
+    DEMO_MODE ? "页面演示模式：数据为演示数据。" : "点击「应用助手」可管理你的 AI 应用。"
   );
   const [version, setVersion] = useState("0.5.0");
-  const [closeConfirm, setCloseConfirm] = useState(false);
 
   // 版本号不再写死在界面里，统一从壳层读取
   useEffect(() => {
@@ -58,20 +47,14 @@ export default function App() {
     switch (page) {
       case "application":
         return <ApplicationPage onNotice={notify} />;
-      case "goal":
-        return <GoalPage onNotice={notify} />;
-      case "learning":
-        return <LearningPage onNotice={notify} />;
       case "library":
         return <LibraryPage onNotice={notify} />;
-      case "skills":
-        return <SkillsPage onNotice={notify} />;
       case "system":
         return <SystemPage onNotice={notify} />;
       case "update":
         return <UpdatePage onNotice={notify} />;
-      case "history":
-        return <HistoryPage onNotice={notify} />;
+      case "voice":
+        return <VoicePage />;
       default:
         return (
           <HomePage
@@ -139,7 +122,7 @@ export default function App() {
           <button
             type="button"
             className="window-btn close"
-            onClick={() => (isDeploying() ? setCloseConfirm(true) : void bridge.window.close())}
+            onClick={() => void bridge.window.close()}
             title="关闭"
           >
             ✕
@@ -154,38 +137,20 @@ export default function App() {
           </button>
           <nav className="nav">
             {NAV.map((item) => (
-              <div key={item.key}>
-                <button
-                  type="button"
-                  className={`nav-item${page === item.key ? " active" : ""}`}
-                  onClick={() => {
-                    setPage(item.key);
-                    setNotice(DEMO_MODE ? `${item.label} · 页面演示模式` : item.label);
-                  }}
-                >
-                  <span className="nav-icon" style={{ fontFamily: "Segoe MDL2 Assets" }}>
-                    {item.icon}
-                  </span>
-                  <span>{item.label}</span>
-                </button>
-                {item.key === "update" && (
-                  <div className="recent-section">
-                    <div className="recent-section-title">最近</div>
-                    <button
-                      type="button"
-                      className="recent-task"
-                      title="制作智能体及实施流程"
-                      onClick={() => {
-                        setPage("history");
-                        setNotice("已打开最近任务：制作智能体及实施流程");
-                      }}
-                    >
-                      <span className="recent-task-name">制作智能体及实施流程</span>
-                      <span className="recent-task-time">18小时前</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+              <button
+                key={item.key}
+                type="button"
+                className={`nav-item${page === item.key ? " active" : ""}`}
+                onClick={() => {
+                  setPage(item.key);
+                  setNotice(DEMO_MODE ? `${item.label} · 页面演示模式` : item.label);
+                }}
+              >
+                <span className="nav-icon" style={{ fontFamily: "Segoe MDL2 Assets" }}>
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+              </button>
             ))}
           </nav>
         </aside>
@@ -193,22 +158,7 @@ export default function App() {
         <main className="content">{renderPage()}</main>
       </div>
 
-
       <footer className="notice">{notice}</footer>
-
-      <ConfirmDialog
-        open={closeConfirm}
-        title="部署任务还在进行"
-        detail="关闭窗口会停止当前部署，已完成的步骤会保留。确定要停止并关闭吗？"
-        confirmText="停止并关闭"
-        onCancel={() => setCloseConfirm(false)}
-        onConfirm={() => {
-          setCloseConfirm(false);
-          void cancelDeploy()
-            .catch(() => undefined)
-            .finally(() => bridge.window.close());
-        }}
-      />
     </div>
   );
 }

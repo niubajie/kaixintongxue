@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"embed"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -497,44 +496,4 @@ func (a *App) handleDeleteCustomSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
-}
-
-func (a *App) handleDeployHistory(w http.ResponseWriter, r *http.Request) {
-	if a.store == nil {
-		fail(w, http.StatusServiceUnavailable, "本地库未初始化")
-		return
-	}
-	// 列历史前先回收过期租约，保证界面看到的状态是可信的
-	_, _ = a.store.SweepStaleDeployRuns(r.Context())
-	runs, err := a.store.RecentDeployRuns(r.Context(), 20)
-	if err != nil {
-		fail(w, http.StatusInternalServerError, "读取部署历史失败: "+err.Error())
-		return
-	}
-	// 附带「能否续装 / 失败在第几步」，前端据此显示继续与单步重试按钮
-	type runView struct {
-		DeployRun
-		Resumable   bool `json:"resumable"`
-		FailedOrder int  `json:"failedOrder"`
-	}
-	views := make([]runView, 0, len(runs))
-	for _, run := range runs {
-		view := runView{DeployRun: run}
-		var steps []DeployStepStatus
-		if run.StepsJSON != "" && json.Unmarshal([]byte(run.StepsJSON), &steps) == nil {
-			pending := 0
-			for _, step := range steps {
-				if step.Status == "done" {
-					continue
-				}
-				pending++
-				if step.Status == "failed" && view.FailedOrder == 0 {
-					view.FailedOrder = step.Order
-				}
-			}
-			view.Resumable = pending > 0 && run.State != "running"
-		}
-		views = append(views, view)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"runs": views})
 }

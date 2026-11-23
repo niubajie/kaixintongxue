@@ -1,13 +1,10 @@
 export type PageKey =
   | "home"
   | "application"
-  | "goal"
-  | "learning"
   | "library"
-  | "skills"
   | "system"
   | "update"
-  | "history";
+  | "voice";
 
 export interface AiModelOption {
   name: string;

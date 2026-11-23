@@ -26,6 +26,9 @@ export interface DesktopBridge {
   /** 主程序可执行文件路径（桌面端用于写开机启动项）。 */
   getAppExePath(): Promise<string>;
 
+  /** 本机 Go 服务端口；没有本地服务时返回 0。 */
+  getLocalServicePort(): Promise<number>;
+
   window: {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<void>;

@@ -19,8 +19,7 @@ interface Props {
 
 const QUICK: { view: View; label: string }[] = [
   { view: "apps", label: "应用助手" },
-  { view: "goals", label: "目标助手" },
-  { view: "learning", label: "学习助手" }
+  { view: "voice", label: "实时语音" }
 ];
 
 export function HomePage({ onOpen, onOpenDrawer, onNotice }: Props) {

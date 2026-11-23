@@ -21,14 +21,68 @@ export interface MaterialItem {
 /** 应用类型：决定数据窗展示哪些指标 */
 export type AppKind = "repair" | "douyin" | "generic";
 
+/** 应用分类：L1 顶部的工作 / 生活 / 学习标签 */
+export type AppCategory = "work" | "life" | "study";
+
+/** 应用内的计划任务：有未完成任务的应用会出现在「正在运行」 */
+export interface AppTask {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface AppModule {
   id: string;
   title: string;
+  category: AppCategory;
   kind?: AppKind;
   diaries: DiaryEntry[];
   materials: MaterialItem[];
-  /** 子应用：内容与主应用完全一致（笔记 + 资料库） */
+  tasks: AppTask[];
+  /** 子应用：内容与主应用完全一致（笔记 + 资料库 + 计划任务） */
   children?: AppModule[];
+}
+
+function isAppCategory(value: unknown): value is AppCategory {
+  return value === "work" || value === "life" || value === "study";
+}
+
+function isAppKind(value: unknown): value is AppKind {
+  return value === "repair" || value === "douyin" || value === "generic";
+}
+
+/** 旧数据迁移：缺分类默认「生活」，缺任务默认空数组，子应用递归归一。 */
+export function normalizeApps(input: unknown): AppModule[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  const apps: AppModule[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const raw = item as Record<string, unknown>;
+    if (typeof raw.id !== "string" || typeof raw.title !== "string") {
+      continue;
+    }
+    const tasks: AppTask[] = Array.isArray(raw.tasks)
+      ? (raw.tasks as unknown[])
+          .filter((task): task is Record<string, unknown> => Boolean(task) && typeof task === "object")
+          .filter((task) => typeof task.id === "string" && typeof task.text === "string")
+          .map((task) => ({ id: String(task.id), text: String(task.text), done: task.done === true }))
+      : [];
+    apps.push({
+      id: raw.id,
+      title: raw.title,
+      category: isAppCategory(raw.category) ? raw.category : "life",
+      kind: isAppKind(raw.kind) ? raw.kind : undefined,
+      diaries: Array.isArray(raw.diaries) ? (raw.diaries as DiaryEntry[]) : [],
+      materials: Array.isArray(raw.materials) ? (raw.materials as MaterialItem[]) : [],
+      tasks,
+      children: Array.isArray(raw.children) ? normalizeApps(raw.children) : undefined
+    });
+  }
+  return apps;
 }
 
 export interface PlanStep {
@@ -330,9 +384,12 @@ export function useSpeechToText(onText: (text: string) => void) {
 }
 
 export const SAMPLE_APPS: AppModule[] = [
+  // ---------- 工作 ----------
   {
     id: "app-repair",
     title: "电脑维修",
+    category: "work",
+    kind: "repair",
     diaries: [
       {
         id: "d-repair-1",
@@ -350,11 +407,42 @@ export const SAMPLE_APPS: AppModule[] = [
     materials: [
       { id: "m-repair-1", name: "主板元件识别对照表.pdf", size: "1.6 MB", uploadedAt: "2026-11-12 10:20" },
       { id: "m-repair-2", name: "常见蓝屏代码速查.md", size: "48 KB", uploadedAt: "2026-11-08 15:05" }
+    ],
+    tasks: [
+      { id: "t-repair-1", text: "整理本月主板故障案例", done: false },
+      { id: "t-repair-2", text: "更新蓝屏代码速查表", done: true }
     ]
   },
   {
+    id: "app-douyin-auto",
+    title: "抖音全自动视频发布",
+    category: "work",
+    kind: "douyin",
+    diaries: [],
+    materials: [],
+    tasks: [{ id: "t-douyin-auto-1", text: "配置每日 10:00 自动发布", done: false }]
+  },
+  {
+    id: "app-douyin-hot",
+    title: "抖音爆款视频",
+    category: "work",
+    kind: "douyin",
+    diaries: [
+      {
+        id: "d-douyin-hot-1",
+        title: "本周爆款选题拆解",
+        content: "对比 5 条同赛道爆款，总结前三秒钩子与结尾引导话术。",
+        createdAt: "2026-11-15 11:20"
+      }
+    ],
+    materials: [],
+    tasks: []
+  },
+  // ---------- 生活 ----------
+  {
     id: "app-love",
     title: "恋爱宝典",
+    category: "life",
     diaries: [
       {
         id: "d-love-1",
@@ -363,13 +451,15 @@ export const SAMPLE_APPS: AppModule[] = [
         createdAt: "2026-11-09 22:05"
       }
     ],
-    materials: [{ id: "m-love-1", name: "沟通话题清单.md", size: "22 KB", uploadedAt: "2026-11-09 21:40" }]
+    materials: [{ id: "m-love-1", name: "沟通话题清单.md", size: "22 KB", uploadedAt: "2026-11-09 21:40" }],
+    tasks: [{ id: "t-love-1", text: "整理 10 个约会话题", done: false }]
   },
-  { id: "app-massage", title: "推拿按摩", diaries: [], materials: [] },
-  { id: "app-herb", title: "古法单方", diaries: [], materials: [] },
+  { id: "app-massage", title: "推拿按摩", category: "life", diaries: [], materials: [], tasks: [] },
+  { id: "app-herb", title: "古法单方", category: "life", diaries: [], materials: [], tasks: [] },
   {
     id: "app-basketball",
     title: "篮球训练",
+    category: "life",
     diaries: [
       {
         id: "d-ball-1",
@@ -378,11 +468,37 @@ export const SAMPLE_APPS: AppModule[] = [
         createdAt: "2026-11-14 18:30"
       }
     ],
-    materials: []
+    materials: [],
+    tasks: [{ id: "t-ball-1", text: "本周完成 3 次投篮训练", done: false }]
   },
-  { id: "app-daily", title: "日常妙法", diaries: [], materials: [] },
-  { id: "app-exam", title: "高中试题", diaries: [], materials: [] },
-  { id: "app-child", title: "小孩教育", diaries: [], materials: [] }
+  { id: "app-daily", title: "日常妙法", category: "life", diaries: [], materials: [], tasks: [] },
+  { id: "app-humor", title: "幽默", category: "life", diaries: [], materials: [], tasks: [] },
+  {
+    id: "app-weight",
+    title: "减肥",
+    category: "life",
+    diaries: [],
+    materials: [],
+    tasks: [
+      { id: "t-weight-1", text: "每天记录体重与饮食", done: false },
+      { id: "t-weight-2", text: "每周三次有氧训练", done: true }
+    ]
+  },
+  { id: "app-travel", title: "旅游", category: "life", diaries: [], materials: [], tasks: [] },
+  { id: "app-food", title: "美食", category: "life", diaries: [], materials: [], tasks: [] },
+  // ---------- 学习 ----------
+  { id: "app-exam", title: "高中试题", category: "study", diaries: [], materials: [], tasks: [] },
+  { id: "app-child", title: "小孩教育", category: "study", diaries: [], materials: [], tasks: [] },
+  { id: "app-english", title: "英语", category: "study", diaries: [], materials: [], tasks: [] },
+  { id: "app-dance", title: "舞蹈", category: "study", diaries: [], materials: [], tasks: [] },
+  {
+    id: "app-math",
+    title: "数学",
+    category: "study",
+    diaries: [],
+    materials: [],
+    tasks: [{ id: "t-math-1", text: "完成本周错题重做", done: false }]
+  }
 ];
 
 export const SAMPLE_GOALS: AssistantGoal[] = [

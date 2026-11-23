@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -163,7 +164,7 @@ func (a *App) handleDataMove(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "记录新位置失败："+err.Error())
 		return
 	}
-	a.deployLog("数据目录已迁移到 %s，重启后生效", target)
+	log.Printf("数据目录已迁移到 %s，重启后生效", target)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message":      "已复制到新位置，重启应用后生效；确认无误后可手动删除旧目录。",
 		"target":       target,

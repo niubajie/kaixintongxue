@@ -9,6 +9,8 @@
 /src/kaixin_server_go/server-data/
 /src/kaixin_server_go/*.exe
 /src/kaixin_local_go/*.exe
+# sherpa-onnx 运行库（构建时从 Go 模块复制，不入库）
+/src/kaixin_local_go/*.dll
 
 # 前端依赖与构建产物
 node_modules/

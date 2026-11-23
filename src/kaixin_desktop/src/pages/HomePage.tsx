@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { ModelSelector } from "../components/ModelSelector";
 import { AI_MODELS, type AiModelOption } from "../data";
 import { bridge } from "../platform";
-import { fetchASRStatus, streamChat, summarizeChat, transcribeAudio, type ChatResult } from "../deployApi";
+import {
+  fetchLocalVoiceStatus,
+  streamChat,
+  summarizeChat,
+  transcribeLocalPcm,
+  type ChatResult
+} from "../deployApi";
+import { encodePcmBase64 } from "../voice";
 
 interface Props {
   onNotice: (message: string) => void;
@@ -59,6 +66,28 @@ function baseName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+// sherpa-onnx 只接受 16kHz 单声道 PCM，AudioContext 实际采样率可能是 48kHz，
+// 这里做一次线性重采样，避免送错采样率导致识别成乱码。
+const ASR_SAMPLE_RATE = 16000;
+
+function resampleTo16k(input: Float32Array, inputRate: number): Float32Array {
+  if (inputRate === ASR_SAMPLE_RATE || input.length === 0) {
+    return input;
+  }
+  const ratio = inputRate / ASR_SAMPLE_RATE;
+  const outLength = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Float32Array(outLength);
+  for (let i = 0; i < outLength; i += 1) {
+    const pos = i * ratio;
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    const a = input[idx] ?? 0;
+    const b = input[idx + 1] ?? a;
+    out[i] = a + (b - a) * frac;
+  }
+  return out;
+}
+
 export function HomePage({ onNotice, onNavigateApps }: Props) {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<AiModelOption>(AI_MODELS[0]);
@@ -76,36 +105,23 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
   const [wave, setWave] = useState<number[]>([]);
   const [voiceHint, setVoiceHint] = useState("");
   const [transcribing, setTranscribing] = useState(false);
-  const [asrReady, setAsrReady] = useState<boolean | null>(null);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef(0);
   const timerRef = useRef(0);
-  const chunksRef = useRef<Blob[]>([]);
+  const pcmRef = useRef<Float32Array[]>([]);
+  const sampleRateRef = useRef(ASR_SAMPLE_RATE);
 
-  // 启动时探测本地转写是否就绪（二进制 + 模型 + ffmpeg）
+  // 启动时探测本地语音模型是否就绪（sherpa-onnx 做转写，无需 ffmpeg/whisper）
   useEffect(() => {
     setPendingMaterials(collectPendingMaterials());
   }, []);
 
   useEffect(() => {
-    let alive = true;
-    fetchASRStatus()
-      .then((status) => {
-        if (alive) {
-          setAsrReady(status.available);
-        }
-      })
-      .catch(() => {
-        if (alive) {
-          setAsrReady(null);
-        }
-      });
-    return () => {
-      alive = false;
-    };
+    // 打开首页就打一次状态：sidecar 会在后台加载模型，避免第一次录音时冷启动
+    void fetchLocalVoiceStatus().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -131,6 +147,11 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
   function stopTracks() {
     window.clearInterval(timerRef.current);
     cancelAnimationFrame(rafRef.current);
+    if (processorRef.current) {
+      processorRef.current.onaudioprocess = null;
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     void audioCtxRef.current?.close();
@@ -156,11 +177,20 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
       streamRef.current = stream;
 
+      // 不要指定 16000：本机 WebView2 上按 16kHz 建上下文会导致音频图不运行、
+      // 波形与 PCM 全为静默。用设备默认采样率采集，再自行重采样到 16kHz。
       const ctx = new AudioContext();
       audioCtxRef.current = ctx;
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+      sampleRateRef.current = ctx.sampleRate;
+
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -180,15 +210,20 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
       };
       tick();
 
-      chunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
+      // 直接采集 PCM：WebView2 里 MediaRecorder 产出的 webm 常常拿不到有效数据，
+      // 而 ScriptProcessorNode 能稳定拿到每帧原始样点，供 sherpa-onnx 转写。
+      pcmRef.current = [];
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (event) => {
+        pcmRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)));
       };
-      recorder.start();
-      recorderRef.current = recorder;
+      // 接一个静音增益再连到 destination：部分实现里处理器不连输出就不触发回调。
+      const mute = ctx.createGain();
+      mute.gain.value = 0;
+      source.connect(processor);
+      processor.connect(mute);
+      mute.connect(ctx.destination);
+      processorRef.current = processor;
 
       setSeconds(0);
       setVoiceHint("");
@@ -204,47 +239,68 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
   };
 
   const stopRecording = () => {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
+    if (!streamRef.current) {
+      stopTracks();
+      setRecording(false);
+      setWave([]);
+      setVoiceHint("录音尚未开始。");
+      return;
+    }
+    const rate = sampleRateRef.current || ASR_SAMPLE_RATE;
     stopTracks();
     setRecording(false);
     setWave([]);
-    const chunks = chunksRef.current;
-    chunksRef.current = [];
-    if (chunks.length === 0) {
+
+    const chunks = pcmRef.current;
+    pcmRef.current = [];
+    let total = 0;
+    for (const chunk of chunks) {
+      total += chunk.length;
+    }
+    if (total === 0) {
       setVoiceHint(`已录音 ${seconds} 秒，但没有采集到音频数据。`);
       return;
     }
-    const blob = new Blob(chunks, { type: "audio/webm" });
-    setTranscribing(true);
-    setVoiceHint(`已录音 ${seconds} 秒，正在本地转写…`);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : "";
-      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-      if (!base64) {
-        setTranscribing(false);
-        setVoiceHint("音频读取失败。");
-        return;
+    const merged = new Float32Array(total);
+    let offset = 0;
+    let peak = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+      for (let i = 0; i < chunk.length; i += 1) {
+        const value = Math.abs(chunk[i]);
+        if (value > peak) {
+          peak = value;
+        }
       }
-      transcribeAudio(base64, "zh")
-        .then((result) => {
-          const text = result.text.trim();
-          if (text) {
-            setInput((current) => (current ? `${current} ${text}` : text));
-            setVoiceHint(`已转写（${Math.round(result.elapsedMs / 100) / 10} 秒，本地 Whisper）：${text}`);
-            onNotice("语音已转成文字，并插入输入框。");
-          } else {
-            setVoiceHint("转写完成，但没有识别到语音内容。");
-          }
-        })
-        .catch((err: unknown) => {
-          setVoiceHint(err instanceof Error ? err.message : "转写失败");
-        })
-        .finally(() => setTranscribing(false));
-    };
-    reader.readAsDataURL(blob);
+    }
+    const durationSec = merged.length / rate;
+    const diag = `${durationSec.toFixed(1)} 秒，采样率 ${rate}Hz，峰值 ${peak.toFixed(3)}`;
+    // 有效音量极低时先说清楚是采集问题，避免被误判成「模型不行」
+    if (peak < 0.005) {
+      setVoiceHint(`采集到的音量过低（${diag}），请检查系统麦克风输入设备与音量。`);
+      return;
+    }
+    const samples = resampleTo16k(merged, rate);
+
+    setTranscribing(true);
+    setVoiceHint(`已录音 ${durationSec.toFixed(1)} 秒，正在本地转写…`);
+    transcribeLocalPcm(encodePcmBase64(samples), { sampleRate: rate, seconds: durationSec, peak })
+      .then((result) => {
+        const text = result.text.trim();
+        if (text) {
+          setInput((current) => (current ? `${current} ${text}` : text));
+          setVoiceHint(`已转写（${(result.elapsedMs / 1000).toFixed(1)} 秒，本地识别）：${text}`);
+          onNotice("语音已转成文字，并插入输入框。");
+        } else {
+          setVoiceHint(`转写完成，但没有识别到语音内容（${diag}）。`);
+        }
+      })
+      .catch((err: unknown) => {
+        setVoiceHint(err instanceof Error ? err.message : "转写失败");
+      })
+      .finally(() => setTranscribing(false));
   };
 
   const send = async () => {
@@ -427,7 +483,7 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
               <button
                 type="button"
                 className="icon-btn"
-                title={recording ? "停止录音" : asrReady === false ? "语音输入（本地转写不可用，仅录音）" : "语音输入"}
+                title={recording ? "停止录音" : "语音输入"}
                 onClick={() => (recording ? stopRecording() : void startRecording())}
                 style={recording ? { background: "var(--accent-light)" } : undefined}
               >

@@ -1,26 +1,18 @@
 import { useEffect, useState } from "react";
 import { HomePage } from "./pages/HomePage";
 import { ApplicationPage } from "./pages/ApplicationPage";
-import { GoalPage } from "./pages/GoalPage";
-import { LearningPage } from "./pages/LearningPage";
 import { LibraryPage } from "./pages/LibraryPage";
-import { SkillsPage } from "./pages/SkillsPage";
 import { SystemPage } from "./pages/SystemPage";
 import { UpdatePage } from "./pages/UpdatePage";
-import { HistoryPage } from "./pages/HistoryPage";
+import { VoicePage } from "./pages/VoicePage";
 import { bridge } from "./platform";
-import { ConfirmDialog } from "./components/ConfirmDialog";
-import { isDeploying } from "./runtimeState";
-import { cancelDeploy } from "./deployApi";
 import type { PageKey } from "./data";
 
 const NAV: { key: PageKey; label: string; icon: string }[] = [
   { key: "home", label: "新建任务", icon: "\uE710" },
   { key: "application", label: "应用助手", icon: "\uE8A9" },
-  { key: "goal", label: "目标助手", icon: "\uE71D" },
-  { key: "learning", label: "学习助手", icon: "\uE82D" },
+  { key: "voice", label: "实时语音", icon: "\uE720" },
   { key: "library", label: "本地资料", icon: "\uE8F1" },
-  { key: "skills", label: "技能部署", icon: "\uE90F" },
   { key: "system", label: "系统设置", icon: "\uE713" },
   { key: "update", label: "版本更新", icon: "\uE777" }
 ];
@@ -36,7 +28,6 @@ export default function App() {
       : "点击「技能部署」可选择技能并生成方案。"
   );
   const [version, setVersion] = useState("0.5.0");
-  const [closeConfirm, setCloseConfirm] = useState(false);
 
   // 版本号不再写死在界面里，统一从壳层读取
   useEffect(() => {
@@ -57,20 +48,14 @@ export default function App() {
     switch (page) {
       case "application":
         return <ApplicationPage onNotice={notify} />;
-      case "goal":
-        return <GoalPage onNotice={notify} />;
-      case "learning":
-        return <LearningPage onNotice={notify} />;
+      case "voice":
+        return <VoicePage />;
       case "library":
         return <LibraryPage onNotice={notify} />;
-      case "skills":
-        return <SkillsPage onNotice={notify} />;
       case "system":
         return <SystemPage onNotice={notify} />;
       case "update":
         return <UpdatePage onNotice={notify} />;
-      case "history":
-        return <HistoryPage onNotice={notify} />;
       default:
         return (
           <HomePage
@@ -138,7 +123,7 @@ export default function App() {
             <button
               type="button"
               className="window-btn close"
-              onClick={() => (isDeploying() ? setCloseConfirm(true) : void bridge.window.close())}
+              onClick={() => void bridge.window.close()}
               title="关闭"
             >
               ✕
@@ -194,20 +179,6 @@ export default function App() {
       </div>
 
       <footer className="notice">{notice}</footer>
-
-      <ConfirmDialog
-        open={closeConfirm}
-        title="部署任务还在进行"
-        detail="关闭窗口会停止当前部署，已完成的步骤会保留。确定要停止并关闭吗？"
-        confirmText="停止并关闭"
-        onCancel={() => setCloseConfirm(false)}
-        onConfirm={() => {
-          setCloseConfirm(false);
-          void cancelDeploy()
-            .catch(() => undefined)
-            .finally(() => bridge.window.close());
-        }}
-      />
     </div>
   );
 }

@@ -1,6 +1,17 @@
 // 语音播报：部署进度与故障用中文播报（FR-SYS-04）。
 // 用系统自带的 speechSynthesis，不联网、不引入依赖；播报失败静默忽略，绝不阻塞操作。
 
+/** Float32 PCM → base64（小端），供本地语音接口使用；分块拼接避免栈溢出。 */
+export function encodePcmBase64(samples: Float32Array): string {
+  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
+  let binary = "";
+  const chunk = 0x2000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 const VOICE_KEY = "kaixin.voiceBroadcast";
 
 export function isVoiceEnabled(): boolean {

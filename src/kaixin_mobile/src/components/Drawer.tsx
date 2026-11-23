@@ -6,11 +6,11 @@ import {
   IconClose,
   IconFolder,
   IconGear,
+  IconHeadset,
   IconMonitor,
   IconRefresh,
   IconScan,
-  IconSearch,
-  IconTool
+  IconSearch
 } from "./Icons";
 
 interface Props {
@@ -24,7 +24,7 @@ interface Props {
 
 const NAV: { view: View; label: string; icon: JSX.Element }[] = [
   { view: "local", label: "本地资料", icon: <IconFolder /> },
-  { view: "skills", label: "技能部署", icon: <IconTool /> },
+  { view: "voice", label: "实时语音", icon: <IconHeadset /> },
   { view: "settings", label: "系统设置", icon: <IconGear /> },
   { view: "version", label: "版本更新", icon: <IconRefresh /> }
 ];

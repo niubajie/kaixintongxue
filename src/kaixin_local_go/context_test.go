@@ -59,29 +59,6 @@ func TestTrimMessagesKeepsSummary(t *testing.T) {
 	}
 }
 
-func TestExtractJSONFromModelOutput(t *testing.T) {
-	cases := []struct {
-		name      string
-		input     string
-		wantArray bool
-		want      string
-	}{
-		{"纯数组", `["问题一","问题二"]`, true, `["问题一","问题二"]`},
-		{"带围栏", "```json\n[\"a\",\"b\"]\n```", true, `["a","b"]`},
-		{"前后废话", `好的，结果如下：{"stages":[{"name":"A","steps":["x"]}]} 希望有帮助`, false,
-			`{"stages":[{"name":"A","steps":["x"]}]}`},
-		{"没有 JSON", "我不知道", true, ""},
-	}
-	for _, item := range cases {
-		t.Run(item.name, func(t *testing.T) {
-			got := extractJSON(item.input, item.wantArray)
-			if got != item.want {
-				t.Fatalf("extractJSON = %q，期望 %q", got, item.want)
-			}
-		})
-	}
-}
-
 func TestCleanMessagesDropsInvalidRoles(t *testing.T) {
 	got := cleanMessages([]ChatMessage{
 		{Role: "user", Content: "你好"},

@@ -187,7 +187,8 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
           chunksRef.current.push(event.data);
         }
       };
-      recorder.start();
+      // 每秒落一次分片：即使 stop 时的最后一片为空，也已经攒到音频
+      recorder.start(1000);
       recorderRef.current = recorder;
 
       setSeconds(0);
@@ -204,47 +205,68 @@ export function HomePage({ onNotice, onNavigateApps }: Props) {
   };
 
   const stopRecording = () => {
-    recorderRef.current?.stop();
+    const recorder = recorderRef.current;
     recorderRef.current = null;
-    stopTracks();
     setRecording(false);
     setWave([]);
-    const chunks = chunksRef.current;
-    chunksRef.current = [];
-    if (chunks.length === 0) {
-      setVoiceHint(`已录音 ${seconds} 秒，但没有采集到音频数据。`);
+    if (!recorder) {
+      stopTracks();
+      setVoiceHint("录音尚未开始。");
       return;
     }
-    const blob = new Blob(chunks, { type: "audio/webm" });
-    setTranscribing(true);
-    setVoiceHint(`已录音 ${seconds} 秒，正在本地转写…`);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : "";
-      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-      if (!base64) {
-        setTranscribing(false);
-        setVoiceHint("音频读取失败。");
+    const finish = () => {
+      stopTracks();
+      const chunks = chunksRef.current;
+      chunksRef.current = [];
+      if (chunks.length === 0) {
+        setVoiceHint(`已录音 ${seconds} 秒，但没有采集到音频数据。`);
         return;
       }
-      transcribeAudio(base64, "zh")
-        .then((result) => {
-          const text = result.text.trim();
-          if (text) {
-            setInput((current) => (current ? `${current} ${text}` : text));
-            setVoiceHint(`已转写（${Math.round(result.elapsedMs / 100) / 10} 秒，本地 Whisper）：${text}`);
-            onNotice("语音已转成文字，并插入输入框。");
-          } else {
-            setVoiceHint("转写完成，但没有识别到语音内容。");
-          }
-        })
-        .catch((err: unknown) => {
-          setVoiceHint(err instanceof Error ? err.message : "转写失败");
-        })
-        .finally(() => setTranscribing(false));
+      const blob = new Blob(chunks, { type: "audio/webm" });
+      setTranscribing(true);
+      setVoiceHint(`已录音 ${seconds} 秒，正在本地转写…`);
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = typeof reader.result === "string" ? reader.result : "";
+        const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
+        if (!base64) {
+          setTranscribing(false);
+          setVoiceHint("音频读取失败。");
+          return;
+        }
+        transcribeAudio(base64, "zh")
+          .then((result) => {
+            const text = result.text.trim();
+            if (text) {
+              setInput((current) => (current ? `${current} ${text}` : text));
+              setVoiceHint(`已转写（${Math.round(result.elapsedMs / 100) / 10} 秒，本地 Whisper）：${text}`);
+              onNotice("语音已转成文字，并插入输入框。");
+            } else {
+              setVoiceHint("转写完成，但没有识别到语音内容。");
+            }
+          })
+          .catch((err: unknown) => {
+            setVoiceHint(err instanceof Error ? err.message : "转写失败");
+          })
+          .finally(() => setTranscribing(false));
+      };
+      reader.readAsDataURL(blob);
     };
-    reader.readAsDataURL(blob);
+
+    // MediaRecorder.stop() 是异步的：最后一段 dataavailable 在 onstop 之前才到，
+    // 必须等落袋再读，否则会误报「没有采集到音频数据」。
+    recorder.onstop = finish;
+    if (recorder.state === "inactive") {
+      finish();
+      return;
+    }
+    try {
+      recorder.stop();
+    } catch {
+      finish();
+    }
   };
 
   const send = async () => {

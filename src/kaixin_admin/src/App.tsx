@@ -3,19 +3,17 @@ import { api } from "./api";
 import type { Profile, Skill } from "./types";
 import { UsersPanel } from "./components/UsersPanel";
 import { AdminUsersPanel } from "./components/AdminUsersPanel";
-import { SkillsPanel } from "./components/SkillsPanel";
 import { VersionsPanel } from "./components/VersionsPanel";
 import { NotesPanel } from "./components/NotesPanel";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { BillingPanel } from "./components/BillingPanel";
 import { OptimizationsPanel } from "./components/OptimizationsPanel";
 
-type Tab = "admins" | "users" | "skills" | "versions" | "notes" | "materials" | "billing" | "optimizations";
+type Tab = "admins" | "users" | "versions" | "notes" | "materials" | "billing" | "optimizations";
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: "users", label: "用户管理" },
   { key: "admins", label: "管理员管理" },
-  { key: "skills", label: "技能管理" },
   { key: "versions", label: "版本管理" },
   { key: "notes", label: "升级说明" },
   { key: "materials", label: "资料管理" },
@@ -144,7 +142,6 @@ export function App() {
           <div className="tab-body">
           {tab === "users" && <UsersPanel notify={notify} selfId={profile.id} />}
           {tab === "admins" && <AdminUsersPanel notify={notify} selfId={profile.id} />}
-          {tab === "skills" && <SkillsPanel skills={skills} reload={loadSkills} notify={notify} />}
           {tab === "versions" && <VersionsPanel skills={skills} reload={loadSkills} notify={notify} />}
           {tab === "notes" && <NotesPanel notify={notify} />}
           {tab === "materials" && <MaterialsPanel notify={notify} />}

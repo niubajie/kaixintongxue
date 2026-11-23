@@ -50,7 +50,45 @@ fn free_port() -> Option<u16> {
         .map(|a| a.port())
 }
 
+/// 语音推理库必须和 sidecar 同目录：Windows 只在 exe 目录与 PATH 里找 DLL。
+/// 首次启动时把随包资源里的 DLL 复制到 exe 目录，避免 sidecar 因缺库起不来。
+fn ensure_voice_dlls(app: &AppHandle) {
+    const DLLS: [&str; 3] = [
+        "onnxruntime.dll",
+        "sherpa-onnx-c-api.dll",
+        "sherpa-onnx-cxx-api.dll",
+    ];
+    let exe_dir = match std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|dir| dir.to_path_buf()))
+    {
+        Some(dir) => dir,
+        None => return,
+    };
+    if DLLS.iter().all(|name| exe_dir.join(name).exists()) {
+        return;
+    }
+    let mut candidates = vec![
+        exe_dir.join("dlls"),
+        exe_dir.join("resources").join("dlls"),
+    ];
+    if let Ok(dir) = app.path().resource_dir() {
+        candidates.push(dir.join("dlls"));
+        candidates.push(dir);
+    }
+    for dir in candidates {
+        if !DLLS.iter().all(|name| dir.join(name).exists()) {
+            continue;
+        }
+        for name in DLLS {
+            let _ = std::fs::copy(dir.join(name), exe_dir.join(name));
+        }
+        return;
+    }
+}
+
 fn spawn_sidecar(app: &AppHandle) -> Result<(u16, CommandChild), String> {
+    ensure_voice_dlls(app);
     let port = free_port().ok_or_else(|| "无法分配本地端口".to_string())?;
     let mut command = app
         .shell()

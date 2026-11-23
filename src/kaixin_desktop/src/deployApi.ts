@@ -534,6 +534,41 @@ export async function fetchASRStatus(): Promise<ASRStatus> {
   return (await response.json()) as ASRStatus;
 }
 
+/** 本地语音（sherpa-onnx）状态：模型是否就绪，决定语音输入能否直接转写。 */
+export interface LocalVoiceStatus {
+  ready: boolean;
+  loading: boolean;
+  message: string;
+}
+
+export async function fetchLocalVoiceStatus(): Promise<LocalVoiceStatus> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/voice/local/status`);
+  if (!response.ok) {
+    throw new Error(`读取本地语音状态失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as LocalVoiceStatus;
+  return payload;
+}
+
+/** 一次性转写 16kHz 单声道 float32 PCM（base64），复用本地 sherpa-onnx 模型。 */
+export async function transcribeLocalPcm(
+  audioBase64: string,
+  meta?: { sampleRate?: number; seconds?: number; peak?: number }
+): Promise<ASRResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/asr/local`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audioBase64, ...meta })
+  });
+  const payload = (await response.json().catch(() => null)) as (ASRResult & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `转写失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
 export async function transcribeAudio(audioBase64: string, language = "zh"): Promise<ASRResult> {
   const base = await getBaseUrl();
   const response = await fetch(`${base}/api/asr/transcribe`, {

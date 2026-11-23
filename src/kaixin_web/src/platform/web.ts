@@ -21,6 +21,11 @@ export const webBridge: DesktopBridge = {
     return "";
   },
 
+  async getLocalServicePort(): Promise<number> {
+    // 纯浏览器环境没有本机服务，语音页据此提示不可用
+    return 0;
+  },
+
   async pickFiles(): Promise<string[]> {
     return [];
   },

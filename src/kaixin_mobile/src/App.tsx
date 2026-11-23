@@ -1,22 +1,18 @@
 import { useEffect, useState } from "react";
 import { Drawer } from "./components/Drawer";
 import { AppsPage } from "./pages/AppsPage";
-import { GoalsPage } from "./pages/GoalsPage";
 import { HomePage } from "./pages/HomePage";
-import { LearningPage } from "./pages/LearningPage";
 import { LocalPage } from "./pages/LocalPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { SkillsPage } from "./pages/SkillsPage";
 import { VersionPage } from "./pages/VersionPage";
 import { RecentPage } from "./pages/RecentPage";
+import { VoicePage } from "./pages/VoicePage";
 
 export type View =
   | "home"
   | "apps"
-  | "goals"
-  | "learning"
+  | "voice"
   | "local"
-  | "skills"
   | "settings"
   | "version"
   | "recent";
@@ -58,12 +54,8 @@ export default function App() {
         {view !== "home" && (
           <div className="page">
             {view === "apps" && <AppsPage onBack={() => setView("home")} onNotice={setNotice} />}
-            {view === "goals" && <GoalsPage onBack={() => setView("home")} onNotice={setNotice} />}
-            {view === "learning" && (
-              <LearningPage onBack={() => setView("home")} onNotice={setNotice} />
-            )}
+            {view === "voice" && <VoicePage onBack={() => setView("home")} />}
             {view === "local" && <LocalPage onBack={() => setView("home")} onNotice={setNotice} />}
-            {view === "skills" && <SkillsPage onBack={() => setView("home")} onNotice={setNotice} />}
             {view === "settings" && (
               <SettingsPage onBack={() => setView("home")} onNotice={setNotice} />
             )}

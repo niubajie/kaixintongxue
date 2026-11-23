@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -201,11 +202,24 @@ func (a *App) handleUpdateDownload(w http.ResponseWriter, r *http.Request) {
 	if info != nil {
 		size = info.Size()
 	}
-	a.deployLog("更新包已下载并校验：%s", target)
+	log.Printf("更新包已下载并校验：%s", target)
 	writeJSON(w, http.StatusOK, UpdateDownloadResult{
 		OK: true, Path: target, FileName: request.FileName, SizeBytes: size,
 		Verified: true, Message: "下载完成并通过校验",
 	})
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // downloadToFile 下载到本地文件，限制 500 MB，避免被超大响应撑爆磁盘。

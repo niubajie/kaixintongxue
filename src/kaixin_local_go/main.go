@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"os"
@@ -9,27 +8,17 @@ import (
 	"time"
 )
 
-// 开心同学 · 本地部署服务：纯本地、无数据库，只监听 127.0.0.1。
-// 前三步（硬件/匹配/方案）零副作用，第四步（部署）才写入本机目录。
+// 开心同学 · 本地服务：默认只监听 127.0.0.1，显式开启 LAN 模式后允许令牌鉴权的局域网访问。
 type App struct {
-	catalog     []SoftwareEntry
-	sites       []SiteEntry
 	runtimeRoot string
 	downloadDir string
-	logDir      string
-	authDir     string
 	root        string
 	dataDir     string
-	deploy      deployer
 	store       *Store
 }
 
 func main() {
-	catalog, err := loadCatalog()
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	sites, err := loadSites()
+	listenCfg, err := loadListenConfig()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -45,16 +34,12 @@ func main() {
 		root = filepath.Join(base, "Kaixin")
 	}
 	app := &App{
-		catalog:     catalog,
-		sites:       sites,
 		runtimeRoot: filepath.Join(root, "runtime"),
 		downloadDir: filepath.Join(root, "downloads"),
-		logDir:      filepath.Join(root, "logs"),
-		authDir:     filepath.Join(root, "auth"),
 	}
 	app.root = root
 	app.dataDir = filepath.Join(root, "data")
-	for _, dir := range []string{app.runtimeRoot, app.downloadDir, app.logDir, app.authDir} {
+	for _, dir := range []string{app.runtimeRoot, app.downloadDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			log.Fatalf("创建目录失败 %s: %v", dir, err)
 		}
@@ -76,34 +61,11 @@ func main() {
 		log.Printf("本地库就绪: %s", filepath.Join(dataDir, "app.db"))
 	}
 
-	// 启动时回收上次异常退出留下的「进行中」部署记录（租约已过期）
-	if app.store != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if n, err := app.store.SweepStaleDeployRuns(ctx); err == nil && n > 0 {
-			log.Printf("回收 %d 条中断的部署记录", n)
-		}
-		cancel()
-	}
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "kaixin-local"})
 	})
 	mux.HandleFunc("GET /api/system/hardware", app.handleHardware)
-	mux.HandleFunc("GET /api/skills/catalog", app.handleCatalog)
-	mux.HandleFunc("GET /api/sites/catalog", app.handleSites)
-	mux.HandleFunc("POST /api/sites/resolve", app.handleSitesResolve)
-	mux.HandleFunc("POST /api/sites/open", app.handleSiteOpenPage)
-	mux.HandleFunc("POST /api/skills/match-software", app.handleMatchSoftware)
-	mux.HandleFunc("POST /api/auth/confirm", app.handleAuthConfirm)
-	mux.HandleFunc("POST /api/auth/open", app.handleAuthOpen)
-	mux.HandleFunc("POST /api/deploy/plan", app.handlePlan)
-	mux.HandleFunc("POST /api/deploy/execute", app.handleDeployExecute)
-	mux.HandleFunc("GET /api/deploy/status", app.handleDeployStatus)
-	mux.HandleFunc("POST /api/deploy/cancel", app.handleDeployCancel)
-	mux.HandleFunc("GET /api/deploy/history", app.handleDeployHistory)
-	mux.HandleFunc("POST /api/deploy/resume", app.handleDeployResume)
-	mux.HandleFunc("POST /api/deploy/retry", app.handleDeployRetryStep)
 	mux.HandleFunc("GET /api/data/info", app.handleDataLocationInfo)
 	mux.HandleFunc("POST /api/data/ack", app.handleDataAck)
 	mux.HandleFunc("POST /api/data/move", app.handleDataMove)
@@ -119,14 +81,17 @@ func main() {
 	mux.HandleFunc("POST /api/kb/rollback", app.handleKBRollback)
 	mux.HandleFunc("GET /api/asr/status", app.handleASRStatus)
 	mux.HandleFunc("POST /api/asr/transcribe", app.handleASRTranscribe)
+	mux.HandleFunc("GET /api/duplex/status", app.handleDuplexStatus)
+	mux.HandleFunc("GET /api/duplex", app.handleDuplex)
+	mux.HandleFunc("GET /api/voice/local/status", app.handleVoiceLocalStatus)
+	mux.HandleFunc("GET /api/voice/local", app.handleVoiceLocal)
+	mux.HandleFunc("POST /api/asr/local", app.handleVoiceLocalTranscribe)
 	mux.HandleFunc("GET /api/system/status", app.handleComputerStatus)
 	mux.HandleFunc("GET /api/model/config", app.handleModelConfigGet)
 	mux.HandleFunc("POST /api/model/config", app.handleModelConfigSave)
 	mux.HandleFunc("POST /api/model/test", app.handleModelTest)
 	mux.HandleFunc("POST /api/chat", app.handleChat)
 	mux.HandleFunc("POST /api/chat/stream", app.handleChatStream)
-	mux.HandleFunc("POST /api/generate/questions", app.handleGenerateQuestions)
-	mux.HandleFunc("POST /api/generate/plan", app.handleGeneratePlan)
 	mux.HandleFunc("POST /api/chat/summarize", app.handleSummarize)
 	mux.HandleFunc("GET /api/chat/usage", app.handleUsageList)
 	mux.HandleFunc("GET /api/system/autostart", app.handleAutostartGet)
@@ -147,17 +112,10 @@ func main() {
 	mux.HandleFunc("POST /api/skills/custom", app.handleSaveCustomSkill)
 	mux.HandleFunc("DELETE /api/skills/custom/{id}", app.handleDeleteCustomSkill)
 
-	// 端口优先从环境变量 KAIXIN_PORT 读取（桌面端 Tauri sidecar 会注入一个空闲端口），
-	// 未设置时回退到 5085，方便网页端与手动调试。
-	port := os.Getenv("KAIXIN_PORT")
-	if port == "" {
-		port = "5085"
-	}
-	addr := "127.0.0.1:" + port
 	// 显式设置超时：ListenAndServe 默认无 ReadHeaderTimeout，慢连接会一直占着 goroutine。
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           cors(mux),
+		Addr:              listenCfg.addr,
+		Handler:           cors(listenCfg.middleware(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      120 * time.Second,
@@ -165,7 +123,7 @@ func main() {
 	}
 	// 后台预热硬件检测缓存：WMI 冷启动较慢，提前跑完可让前端秒开。
 	warmHardwareCache()
-	log.Printf("开心同学本地部署服务已启动: http://%s （软件运行目录 %s）", addr, app.runtimeRoot)
+	log.Printf("开心同学本地服务已启动: http://%s （软件运行目录 %s，LAN=%t）", listenCfg.addr, app.runtimeRoot, listenCfg.lan)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}

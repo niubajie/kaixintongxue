@@ -1,0 +1,221 @@
+openapi: 3.1.0
+info:
+  title: 开心同学本地服务接口
+  version: 1.0.0
+  description: 桌面端、网页端与移动端共用的本地 sidecar 契约。
+paths:
+  /api/duplex/status:
+    get:
+      summary: 查询实时语音配置状态
+      parameters:
+        - name: X-Kaixin-Token
+          in: header
+          required: false
+          description: LAN 模式必填，本机模式不需要。
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 实时语音状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplexStatus"
+        "401":
+          description: LAN 访问令牌缺失或错误
+  /api/duplex:
+    get:
+      summary: 建立 MiniCPM-o 音频全双工 WebSocket
+      description: |
+        成功时升级为 WebSocket（101）。上行与下行均为 JSON 文本帧。
+        上行 PCM 为 16 kHz 单声道 float32 base64，下行为 24 kHz 单声道 float32 base64。
+      parameters:
+        - name: mode
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [audio]
+        - name: token
+          in: query
+          required: false
+          description: LAN 模式的 WebSocket 访问令牌；浏览器无法自定义 Upgrade 请求头。
+          schema:
+            type: string
+      responses:
+        "101":
+          description: WebSocket 握手成功，事件结构见 DuplexEvent。
+        "400":
+          description: mode 参数错误
+        "401":
+          description: LAN 访问令牌缺失或错误
+        "503":
+          description: 未配置 MAP_API_KEY
+  /api/voice/local/status:
+    get:
+      summary: 查询本地语音（sherpa-onnx）就绪状态
+      parameters:
+        - name: X-Kaixin-Token
+          in: header
+          required: false
+          description: LAN 模式必填，本机模式不需要。
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 本地语音状态，ready=false 时不提供伪装可用的能力
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceLocalStatus"
+        "401":
+          description: LAN 访问令牌缺失或错误
+  /api/voice/local:
+    get:
+      summary: 建立本地语音 WebSocket（全本地，无需密钥）
+      description: |
+        成功时升级为 WebSocket（101），收发均为 JSON 文本帧。
+        上行：{"type":"audio","audio":"<16kHz float32 base64>"}，可选 {"type":"cancel"} / {"type":"close"}。
+        下行事件：loading / ready / partial / final / response.start / delta / tts / interrupt / end / error。
+      parameters:
+        - name: token
+          in: query
+          required: false
+          description: LAN 模式的 WebSocket 访问令牌。
+          schema:
+            type: string
+      responses:
+        "101":
+          description: WebSocket 握手成功
+        "401":
+          description: LAN 访问令牌缺失或错误
+  /api/asr/local:
+    post:
+      summary: 一次性转写（本地 sherpa-onnx，无需 whisper / ffmpeg）
+      description: |
+        请求体为完整的一段 16kHz 单声道 float32 小端 PCM（base64），
+        服务端复用本地语音模型转写；单次上限 180 秒、约 25 MB base64。
+      parameters:
+        - name: X-Kaixin-Token
+          in: header
+          required: false
+          description: LAN 模式必填，本机模式不需要。
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audioBase64]
+              properties:
+                audioBase64:
+                  type: string
+                  description: 16kHz 单声道 float32 小端 PCM 的 base64
+      responses:
+        "200":
+          description: 转写结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalASRResult"
+        "400":
+          description: 音频为空或请求格式错误
+        "401":
+          description: LAN 访问令牌缺失或错误
+        "413":
+          description: 音频过大或录音过长
+        "503":
+          description: 本地语音模型缺失或尚未就绪
+components:
+  schemas:
+    DuplexStatus:
+      type: object
+      required: [configured, model]
+      properties:
+        configured:
+          type: boolean
+        model:
+          type: string
+          example: MiniCPM-o-4.5-Realtime
+    VoiceLocalStatus:
+      type: object
+      required: [ready, loading, modelsRoot, asrModel, ttsModel, sampleRate, message]
+      properties:
+        ready:
+          type: boolean
+        loading:
+          type: boolean
+        modelsRoot:
+          type: string
+        asrModel:
+          type: string
+        ttsModel:
+          type: string
+        sampleRate:
+          type: integer
+          example: 16000
+        missing:
+          type: array
+          items:
+            type: string
+          description: 缺失的模型文件；为空表示模型齐备
+        message:
+          type: string
+    LocalASRResult:
+      type: object
+      required: [text, elapsedMs, language]
+      properties:
+        text:
+          type: string
+          description: 识别文本，未识别到时为空串
+        elapsedMs:
+          type: integer
+          format: int64
+          description: 服务端转写耗时（毫秒）
+        language:
+          type: string
+          example: zh
+    DuplexEvent:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum:
+            - session.init
+            - input.append
+            - session.close
+            - session.queued
+            - session.queue_update
+            - session.queue_done
+            - session.created
+            - response.output.delta
+            - error
+            - session.closed
+        kind:
+          type: string
+          enum: [listen, text, audio]
+        text:
+          type: string
+        audio:
+          type: string
+          description: base64 float32 PCM
+        payload:
+          type: object
+          additionalProperties: true
+        input:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          properties:
+            code:
+              oneOf:
+                - type: string
+                - type: number
+            message:
+              type: string
+            type:
+              type: string
