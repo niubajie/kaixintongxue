@@ -17,6 +17,7 @@ import {
   openLibraryFile,
   type KBDocument,
   type KBSearchHit,
+  type LibraryItem,
   type LibraryScan,
   type LibraryTaxonomy,
   type PendingDoc,
@@ -175,6 +176,15 @@ export function LibraryPage({ onNotice }: Props) {
 
   const indexedCount = Object.values(kb).filter((doc) => doc.status === "indexed").length;
   const categories = taxonomy?.categories ?? [];
+  const visibleItems = (scan?.items ?? []).filter((item) => {
+    if (category === ALL) {
+      return true;
+    }
+    if (item.category !== category) {
+      return false;
+    }
+    return sub === "" || item.subCategory === sub;
+  });
 
   const openCategory = (name: string) => {
     setCategory(name);
@@ -311,6 +321,15 @@ export function LibraryPage({ onNotice }: Props) {
       setSchedules(await fetchSchedules());
     } catch (err: unknown) {
       onNotice(err instanceof Error ? err.message : "删除定时任务失败");
+    }
+  };
+
+  const openItem = async (item: LibraryItem) => {
+    try {
+      await openLibraryFile(item.path);
+      onNotice(`已用默认程序打开：${item.name}`);
+    } catch (err: unknown) {
+      onNotice(err instanceof Error ? err.message : "打开文件失败");
     }
   };
 
@@ -453,6 +472,41 @@ export function LibraryPage({ onNotice }: Props) {
             点「打开资料文件夹」会自动创建并打开，把文件按「工作 / 生活 / 学习 / 爱好」建子文件夹放进去。
           </p>
           <p className="caption" style={{ marginTop: 4 }}>目录：{scan.root}</p>
+        </div>
+      )}
+
+      {state === "ready" && scan && scan.exists && (
+        <div className="card lib-files">
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+            <span className="section-title">
+              {category === ALL
+                ? ALL
+                : `${category === "未分类" ? "其它" : category}${sub ? ` / ${sub}` : ""}`}{" "}
+              · {visibleItems.length} 份
+            </span>
+            <span className="caption">点击文件名用默认程序打开</span>
+          </div>
+          {visibleItems.length === 0 ? (
+            <p className="caption">
+              该分类下暂无文件。把文件放进对应文件夹，或用「外网搜集」确认入库。
+            </p>
+          ) : (
+            <div className="lib-file-list">
+              {visibleItems.map((item) => (
+                <button
+                  type="button"
+                  className="lib-hit"
+                  key={item.relPath}
+                  onClick={() => void openItem(item)}
+                >
+                  <div className="lib-hit-title">{item.name}</div>
+                  <p className="lib-hit-snippet">
+                    {item.relPath} · {item.sizeText} · {item.date || item.modTime}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -629,6 +629,7 @@ input[type="range"] {
   padding: 12px;
 }
 
+
 .lib-main {
   min-width: 0;
 }
@@ -1887,6 +1888,19 @@ input[type="range"] {
   .page-library .lib-search.is-center {
     padding-top: 24px;
   }
+}
+
+/* 分类文件列表 */
+.page-library .lib-files {
+  margin-top: 16px;
+}
+
+.page-library .lib-file-list {
+  display: grid;
+  gap: 6px;
+  max-height: 340px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 /* 外网搜集 · 网站设置 */

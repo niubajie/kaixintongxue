@@ -1908,6 +1908,19 @@ input[type="range"] {
   }
 }
 
+/* 分类文件列表 */
+.page-library .lib-files {
+  margin-top: 16px;
+}
+
+.page-library .lib-file-list {
+  display: grid;
+  gap: 6px;
+  max-height: 340px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 /* 外网搜集 · 网站设置 */
 .page-library .lib-sites {
   margin-top: 10px;
