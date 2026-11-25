@@ -1916,3 +1916,26 @@ input[type="range"] {
   padding: 0 10px;
   font-size: 12px;
 }
+
+/* 定时搜索对话框 · 定时内容 / 网站设置 横排 */
+.page-library .dialog-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.page-library .dialog-col {
+  min-width: 0;
+}
+
+.page-library .dialog-col > .field-label:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .page-library .dialog-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+}

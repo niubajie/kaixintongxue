@@ -608,145 +608,152 @@ export function LibraryPage({ onNotice }: Props) {
 
       {draft && (
         <div className="dialog-mask" onClick={() => setDraft(null)}>
-          <div className="dialog" onClick={(event) => event.stopPropagation()} style={{ width: 460, maxWidth: "92vw" }}>
+          <div className="dialog" onClick={(event) => event.stopPropagation()} style={{ width: 720, maxWidth: "92vw" }}>
             <h2 className="dialog-title">{draft.id ? "修改定时搜索" : "新建定时搜索"}</h2>
-            <label className="field-label" style={{ marginTop: 10 }}>关键词</label>
-            <input
-              className="input"
-              value={draft.keyword}
-              onChange={(event) => setDraft({ ...draft, keyword: event.target.value })}
-              placeholder="例如：短视频运营"
-            />
-            <div className="row" style={{ gap: 10, marginTop: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label className="field-label">归入大类</label>
-                <select
-                  className="input"
-                  value={draft.category}
-                  onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                >
-                  <option value="工作">工作</option>
-                  <option value="生活">生活</option>
-                  <option value="学习">学习</option>
-                  <option value="爱好">爱好</option>
-                  <option value="未分类">未分类</option>
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="field-label">子类（可空）</label>
+            <div className="dialog-cols">
+              <div className="dialog-col">
+                <span className="field-label" style={{ display: "block", marginBottom: 6 }}>定时内容</span>
+                <label className="field-label">关键词</label>
                 <input
                   className="input"
-                  value={draft.subCategory}
-                  onChange={(event) => setDraft({ ...draft, subCategory: event.target.value })}
-                  placeholder="如：短视频"
+                  value={draft.keyword}
+                  onChange={(event) => setDraft({ ...draft, keyword: event.target.value })}
+                  placeholder="例如：短视频运营"
                 />
-              </div>
-            </div>
-            <label className="field-label" style={{ marginTop: 10 }}>执行频率</label>
-            <div className="seg" style={{ marginTop: 4 }}>
-              {(["daily", "weekly", "monthly"] as ScheduleFreq[]).map((freq) => (
-                <button
-                  type="button"
-                  key={freq}
-                  className={draft.freq === freq ? "seg-item active" : "seg-item"}
-                  onClick={() => setDraft({ ...draft, freq })}
-                >
-                  {FREQ_LABEL[freq]}
-                </button>
-              ))}
-            </div>
-            <div className="row" style={{ gap: 10, marginTop: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label className="field-label">时间（小时）</label>
-                <select
-                  className="input"
-                  value={draft.hour}
-                  onChange={(event) => setDraft({ ...draft, hour: Number(event.target.value) })}
-                >
-                  {Array.from({ length: 24 }, (_, hour) => (
-                    <option value={hour} key={hour}>
-                      {String(hour).padStart(2, "0")}:00
-                    </option>
+                <div className="row" style={{ gap: 10, marginTop: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="field-label">归入大类</label>
+                    <select
+                      className="input"
+                      value={draft.category}
+                      onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+                    >
+                      <option value="工作">工作</option>
+                      <option value="生活">生活</option>
+                      <option value="学习">学习</option>
+                      <option value="爱好">爱好</option>
+                      <option value="未分类">未分类</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="field-label">子类（可空）</label>
+                    <input
+                      className="input"
+                      value={draft.subCategory}
+                      onChange={(event) => setDraft({ ...draft, subCategory: event.target.value })}
+                      placeholder="如：短视频"
+                    />
+                  </div>
+                </div>
+                <label className="field-label" style={{ marginTop: 10 }}>执行频率</label>
+                <div className="seg" style={{ marginTop: 4 }}>
+                  {(["daily", "weekly", "monthly"] as ScheduleFreq[]).map((freq) => (
+                    <button
+                      type="button"
+                      key={freq}
+                      className={draft.freq === freq ? "seg-item active" : "seg-item"}
+                      onClick={() => setDraft({ ...draft, freq })}
+                    >
+                      {FREQ_LABEL[freq]}
+                    </button>
                   ))}
-                </select>
+                </div>
+                <div className="row" style={{ gap: 10, marginTop: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="field-label">时间（小时）</label>
+                    <select
+                      className="input"
+                      value={draft.hour}
+                      onChange={(event) => setDraft({ ...draft, hour: Number(event.target.value) })}
+                    >
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <option value={hour} key={hour}>
+                          {String(hour).padStart(2, "0")}:00
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {draft.freq === "weekly" && (
+                    <div style={{ flex: 1 }}>
+                      <label className="field-label">星期</label>
+                      <select
+                        className="input"
+                        value={draft.weekday}
+                        onChange={(event) => setDraft({ ...draft, weekday: Number(event.target.value) })}
+                      >
+                        {WEEKDAY_LABEL.slice(1).map((label, index) => (
+                          <option value={index + 1} key={label}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {draft.freq === "monthly" && (
+                    <div style={{ flex: 1 }}>
+                      <label className="field-label">日期</label>
+                      <select
+                        className="input"
+                        value={draft.day}
+                        onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}
+                      >
+                        {Array.from({ length: 28 }, (_, index) => (
+                          <option value={index + 1} key={index + 1}>
+                            {index + 1} 日
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <p className="caption" style={{ marginTop: 8 }}>
+                  定时任务在应用运行期间由本地服务执行；应用关闭时暂停，下次启动会补跑当天未完成的任务。
+                </p>
               </div>
-              {draft.freq === "weekly" && (
-                <div style={{ flex: 1 }}>
-                  <label className="field-label">星期</label>
-                  <select
-                    className="input"
-                    value={draft.weekday}
-                    onChange={(event) => setDraft({ ...draft, weekday: Number(event.target.value) })}
-                  >
-                    {WEEKDAY_LABEL.slice(1).map((label, index) => (
-                      <option value={index + 1} key={label}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+              <div className="dialog-col">
+                <div className="lib-sites" style={{ marginTop: 0 }}>
+                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                    <span className="field-label" style={{ margin: 0 }}>网站设置</span>
+                    <span className="caption">外网搜集只在这些网站里找</span>
+                  </div>
+                  {sites.map((site) => (
+                    <div className="lib-site-row" key={site.id}>
+                      <input
+                        className="input"
+                        value={site.name}
+                        onChange={(event) => patchSite(site.id, { name: event.target.value })}
+                      />
+                      <input
+                        className="input"
+                        value={site.domain}
+                        onChange={(event) => patchSite(site.id, { domain: event.target.value })}
+                      />
+                      <button type="button" className="ghost-btn" onClick={() => void persistSite(site)}>
+                        保存
+                      </button>
+                      <button type="button" className="ghost-btn" onClick={() => void removeSite(site.id)}>
+                        删除
+                      </button>
+                    </div>
+                  ))}
+                  <div className="lib-site-row">
+                    <input
+                      className="input"
+                      placeholder="网站名称"
+                      value={siteDraft.name}
+                      onChange={(event) => setSiteDraft({ ...siteDraft, name: event.target.value })}
+                    />
+                    <input
+                      className="input"
+                      placeholder="域名，如 zhihu.com"
+                      value={siteDraft.domain}
+                      onChange={(event) => setSiteDraft({ ...siteDraft, domain: event.target.value })}
+                    />
+                    <button type="button" className="secondary-btn" onClick={() => void addSite()}>
+                      增加
+                    </button>
+                  </div>
                 </div>
-              )}
-              {draft.freq === "monthly" && (
-                <div style={{ flex: 1 }}>
-                  <label className="field-label">日期</label>
-                  <select
-                    className="input"
-                    value={draft.day}
-                    onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}
-                  >
-                    {Array.from({ length: 28 }, (_, index) => (
-                      <option value={index + 1} key={index + 1}>
-                        {index + 1} 日
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-            <p className="caption" style={{ marginTop: 8 }}>
-              定时任务在应用运行期间由本地服务执行；应用关闭时暂停，下次启动会补跑当天未完成的任务。
-            </p>
-            <div className="lib-sites">
-              <div className="row" style={{ justifyContent: "space-between", marginTop: 12 }}>
-                <span className="field-label" style={{ margin: 0 }}>网站设置</span>
-                <span className="caption">外网搜集只在这些网站里找</span>
-              </div>
-              {sites.map((site) => (
-                <div className="lib-site-row" key={site.id}>
-                  <input
-                    className="input"
-                    value={site.name}
-                    onChange={(event) => patchSite(site.id, { name: event.target.value })}
-                  />
-                  <input
-                    className="input"
-                    value={site.domain}
-                    onChange={(event) => patchSite(site.id, { domain: event.target.value })}
-                  />
-                  <button type="button" className="ghost-btn" onClick={() => void persistSite(site)}>
-                    保存
-                  </button>
-                  <button type="button" className="ghost-btn" onClick={() => void removeSite(site.id)}>
-                    删除
-                  </button>
-                </div>
-              ))}
-              <div className="lib-site-row">
-                <input
-                  className="input"
-                  placeholder="网站名称"
-                  value={siteDraft.name}
-                  onChange={(event) => setSiteDraft({ ...siteDraft, name: event.target.value })}
-                />
-                <input
-                  className="input"
-                  placeholder="域名，如 zhihu.com"
-                  value={siteDraft.domain}
-                  onChange={(event) => setSiteDraft({ ...siteDraft, domain: event.target.value })}
-                />
-                <button type="button" className="secondary-btn" onClick={() => void addSite()}>
-                  增加
-                </button>
               </div>
             </div>
             <div className="dialog-actions">
