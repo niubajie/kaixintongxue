@@ -195,22 +195,31 @@ func TestDuplexRejectsNonJSONAndCleansUp(t *testing.T) {
 	}
 }
 
-func TestDuplexWebSocketRequiresLANToken(t *testing.T) {
+func TestDuplexTokenPolicy(t *testing.T) {
 	cfg := listenConfig{lan: true, tokenHash: sha256.Sum256([]byte("test-token"))}
 	local := httptest.NewServer(cfg.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = websocket.Accept(w, r, nil)
 	})))
 	defer local.Close()
 
+	// 回环连接来自桌面端自身，局域网模式下一律放行。
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, resp, err := websocket.Dial(ctx, wsURL(local.URL), nil)
-	if conn != nil {
-		_ = conn.CloseNow()
-		t.Fatal("缺少令牌时不应建立 WebSocket")
+	conn, _, err := websocket.Dial(ctx, wsURL(local.URL), nil)
+	if err != nil || conn == nil {
+		t.Fatalf("回环连接应放行: conn=%v err=%v", conn, err)
 	}
-	if err == nil || resp == nil || resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("缺少令牌应返回 401: resp=%v err=%v", resp, err)
+	_ = conn.CloseNow()
+
+	// 非回环地址缺少令牌时必须 401，握手不会建立。
+	req := httptest.NewRequest(http.MethodGet, "/api/duplex", nil)
+	req.RemoteAddr = "192.0.2.10:5000"
+	resp := httptest.NewRecorder()
+	cfg.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("非回环无令牌不应进入 handler")
+	})).ServeHTTP(resp, req)
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("非回环无令牌应返回 401，实际 %d", resp.Code)
 	}
 }
 

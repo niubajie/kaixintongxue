@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -73,6 +74,17 @@ func main() {
 	mux.HandleFunc("POST /api/library/open", app.handleLibraryOpen)
 	mux.HandleFunc("POST /api/library/open-folder", app.handleLibraryOpenFolder)
 	mux.HandleFunc("POST /api/library/set-dir", app.handleLibrarySetDir)
+	mux.HandleFunc("GET /api/library/taxonomy", app.handleLibraryTaxonomy)
+	mux.HandleFunc("POST /api/library/collect", app.handleWebCollect)
+	mux.HandleFunc("GET /api/library/pending", app.handlePendingList)
+	mux.HandleFunc("POST /api/library/pending/approve", app.handlePendingApprove)
+	mux.HandleFunc("POST /api/library/pending/reject", app.handlePendingReject)
+	mux.HandleFunc("GET /api/library/schedules", app.handleScheduleList)
+	mux.HandleFunc("POST /api/library/schedules", app.handleScheduleSave)
+	mux.HandleFunc("GET /api/library/sites", app.handleSiteList)
+	mux.HandleFunc("POST /api/library/sites", app.handleSiteSave)
+	mux.HandleFunc("DELETE /api/library/sites/{id}", app.handleSiteDelete)
+	mux.HandleFunc("DELETE /api/library/schedules/{id}", app.handleScheduleDelete)
 	mux.HandleFunc("POST /api/kb/index", app.handleKBIndex)
 	mux.HandleFunc("POST /api/kb/remove", app.handleKBRemove)
 	mux.HandleFunc("GET /api/kb/status", app.handleKBStatus)
@@ -123,6 +135,8 @@ func main() {
 	}
 	// 后台预热硬件检测缓存：WMI 冷启动较慢，提前跑完可让前端秒开。
 	warmHardwareCache()
+	// 定时搜索：应用运行期间由 sidecar 按时抓取；关闭应用即暂停。
+	go app.runScheduler(context.Background())
 	log.Printf("开心同学本地服务已启动: http://%s （软件运行目录 %s，LAN=%t）", listenCfg.addr, app.runtimeRoot, listenCfg.lan)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("服务启动失败: %v", err)

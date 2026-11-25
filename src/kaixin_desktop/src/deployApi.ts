@@ -377,6 +377,8 @@ export interface LibraryItem {
   path: string;
   relPath: string;
   group: string;
+  category: string;
+  subCategory: string;
   type: string;
   size: number;
   sizeText: string;
@@ -443,6 +445,215 @@ export async function setLibraryDir(path: string): Promise<LibraryScan> {
   return payload;
 }
 
+export interface LibrarySubCategory {
+  name: string;
+  count: number;
+}
+
+export interface LibraryCategory {
+  key: string;
+  name: string;
+  count: number;
+  subs: LibrarySubCategory[];
+}
+
+export interface LibraryTaxonomy {
+  categories: LibraryCategory[];
+  pending: number;
+  root: string;
+}
+
+export async function fetchLibraryTaxonomy(): Promise<LibraryTaxonomy> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/taxonomy`);
+  if (!response.ok) {
+    throw new Error(`读取资料分类失败（HTTP ${response.status}）`);
+  }
+  return (await response.json()) as LibraryTaxonomy;
+}
+
+export interface WebCollectResult {
+  provider: string;
+  count: number;
+  pending: number;
+  items: PendingDoc[];
+}
+
+export interface PendingDoc {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  keyword: string;
+  category: string;
+  subCategory: string;
+  snippet: string;
+  createdAt: string;
+}
+
+export async function collectFromWeb(input: {
+  keyword: string;
+  category: string;
+  subCategory: string;
+  limit?: number;
+}): Promise<WebCollectResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/collect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  const payload = (await response.json().catch(() => null)) as (WebCollectResult & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `外网搜集失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function fetchPendingDocs(): Promise<PendingDoc[]> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/pending`);
+  if (!response.ok) {
+    throw new Error(`读取待审核资料失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { items: PendingDoc[] };
+  return payload.items;
+}
+
+export async function approvePendingDoc(id: string): Promise<{ path: string; relPath: string; category: string }> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/pending/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { path: string; relPath: string; category: string; message?: string }
+    | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `入库失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function rejectPendingDoc(id: string): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/pending/reject`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `忽略失败（HTTP ${response.status}）`);
+  }
+}
+
+export type ScheduleFreq = "daily" | "weekly" | "monthly";
+
+export interface SearchSchedule {
+  id: string;
+  keyword: string;
+  category: string;
+  subCategory: string;
+  freq: ScheduleFreq;
+  hour: number;
+  weekday: number;
+  day: number;
+  enabled: boolean;
+  lastRunAt: string;
+  createdAt: string;
+}
+
+export async function fetchSchedules(): Promise<SearchSchedule[]> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/schedules`);
+  if (!response.ok) {
+    throw new Error(`读取定时任务失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { items: SearchSchedule[] };
+  return payload.items;
+}
+
+export async function saveSchedule(input: SearchSchedule): Promise<SearchSchedule> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/schedules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  const payload = (await response.json().catch(() => null)) as (SearchSchedule & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `保存定时任务失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export async function deleteSchedule(id: string): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/schedules/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `删除定时任务失败（HTTP ${response.status}）`);
+  }
+}
+
+// ---------- 外网搜集的网站设置 ----------
+
+export interface SearchSite {
+  id: string;
+  name: string;
+  domain: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export async function fetchSites(): Promise<SearchSite[]> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites`);
+  if (!response.ok) {
+    throw new Error(`读取网站设置失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { items: SearchSite[] };
+  return payload.items;
+}
+
+export async function saveSite(input: {
+  id?: string;
+  name: string;
+  domain: string;
+  enabled?: boolean;
+}): Promise<SearchSite[]> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { items?: SearchSite[]; message?: string }
+    | null;
+  if (!response.ok || !payload?.items) {
+    throw new Error(payload?.message ?? `保存网站失败（HTTP ${response.status}）`);
+  }
+  return payload.items;
+}
+
+export async function deleteSite(id: string): Promise<SearchSite[]> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { items?: SearchSite[]; message?: string }
+    | null;
+  if (!response.ok || !payload?.items) {
+    throw new Error(payload?.message ?? `删除网站失败（HTTP ${response.status}）`);
+  }
+  return payload.items;
+}
 
 // ---------- 本地知识库 ----------
 
@@ -470,14 +681,23 @@ export interface KBSearchHit {
   snippet: string;
 }
 
-export async function fetchKBStatus(): Promise<KBDocument[]> {
-  const base = await getBaseUrl();
+export async function fetchKBStatus(): Promise<KBDocument[]> {  const base = await getBaseUrl();
   const response = await fetch(`${base}/api/kb/status`);
   if (!response.ok) {
     throw new Error(`读取知识库状态失败（HTTP ${response.status}）`);
   }
   const payload = (await response.json()) as { documents?: KBDocument[] };
   return payload.documents ?? [];
+}
+
+export async function searchKnowledgeBase(query: string): Promise<KBSearchHit[]> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/kb/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) {
+    throw new Error(`检索知识库失败（HTTP ${response.status}）`);
+  }
+  const payload = (await response.json()) as { hits?: KBSearchHit[] };
+  return payload.hits ?? [];
 }
 
 export async function indexKnowledgeBase(path: string): Promise<KBBatchResult> {

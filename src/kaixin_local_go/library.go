@@ -23,15 +23,17 @@ const (
 )
 
 type LibraryItem struct {
-	Name     string `json:"name"`
-	Path     string `json:"path"`
-	RelPath  string `json:"relPath"`
-	Group    string `json:"group"`
-	Type     string `json:"type"`
-	Size     int64  `json:"size"`
-	SizeText string `json:"sizeText"`
-	ModTime  string `json:"modTime"`
-	Date     string `json:"date"`
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	RelPath     string `json:"relPath"`
+	Group       string `json:"group"`
+	Category    string `json:"category"`
+	SubCategory string `json:"subCategory"`
+	Type        string `json:"type"`
+	Size        int64  `json:"size"`
+	SizeText    string `json:"sizeText"`
+	ModTime     string `json:"modTime"`
+	Date        string `json:"date"`
 }
 
 type LibraryScan struct {
@@ -169,8 +171,12 @@ func scanLibrary(root string) LibraryScan {
 		rel, _ := filepath.Rel(root, path)
 		parts := strings.Split(rel, string(filepath.Separator))
 		group := "未分类"
+		sub := ""
 		if len(parts) > 1 {
 			group = parts[0]
+		}
+		if len(parts) > 2 {
+			sub = parts[1]
 		}
 		groups[group] = true
 
@@ -180,15 +186,17 @@ func scanLibrary(root string) LibraryScan {
 		}
 		scan.SizeBytes += fileInfo.Size()
 		scan.Items = append(scan.Items, LibraryItem{
-			Name:     entry.Name(),
-			Path:     path,
-			RelPath:  rel,
-			Group:    group,
-			Type:     fileType(entry.Name()),
-			Size:     fileInfo.Size(),
-			SizeText: formatBytes(fileInfo.Size()),
-			ModTime:  mod.UTC().Format(time.RFC3339),
-			Date:     mod.Format("01-02"),
+			Name:        entry.Name(),
+			Path:        path,
+			RelPath:     rel,
+			Group:       group,
+			Category:    mapCategory(group),
+			SubCategory: sub,
+			Type:        fileType(entry.Name()),
+			Size:        fileInfo.Size(),
+			SizeText:    formatBytes(fileInfo.Size()),
+			ModTime:     mod.UTC().Format(time.RFC3339),
+			Date:        mod.Format("01-02"),
 		})
 		return nil
 	})
