@@ -1,7 +1,11 @@
 # 桌面端技术方案（Tauri 2）
 
 > 决策：**TypeScript 写业务，Tauri 2 当壳，Go sidecar 扛重活，NSIS 打包。**
-> 版本 v1.1 ｜ 替代原 Electron 方案
+> 版本 v1.2 ｜ 替代原 Electron 方案
+>
+> v1.2 修订（2026-11-26）：第六章补「已落地配置」表（updater 公钥、minisign 私钥位置、自签名证书、构建后补签）；
+> 发布流程改为可执行命令；新增「安装与快捷方式」小节，明确升级必须走 `setup.exe` 安装器，
+> 桌面快捷方式、开始菜单与卸载项均由安装器创建，手工复制 exe 不会生成。
 >
 > v1.1 修订（评审 P0-2）：CSP 的本地源改为端口通配 `http://127.0.0.1:*`，
 > 与 sidecar 随机端口方案对齐；写死端口会导致请求被 CSP 拦截。
@@ -237,16 +241,61 @@ npm run tauri signer generate -- -w ~/.tauri/agent-platform.key
 - 公钥填进 `tauri.conf.json` 的 `plugins.updater.pubkey`
 - 密码用环境变量 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 传给 CI
 
+**本项目已落地配置（2026-11-25）**
+
+| 项 | 实际值 |
+|---|---|
+| 更新公钥 | 已写入 `tauri.conf.json > plugins.updater.pubkey` |
+| 私钥位置 | `%USERPROFILE%\.tauri\kaixin-desktop.key`（仓库外，密码在同目录 `kaixin-desktop.key.password.txt`） |
+| 更新清单地址 | `https://update.kaixin.example.com/desktop/latest.json`，发布前替换为真实域名 |
+| 更新包签名 | `bundle.createUpdaterArtifacts: true`，构建产出 `*-setup.exe.sig`（minisign） |
+| 代码签名 | `bundle.windows.signCommand` → `scripts/sign-windows.ps1`；证书读 `KAIXIN_SIGN_PFX` + `KAIXIN_SIGN_PFX_PASSWORD` 或 `KAIXIN_SIGN_THUMBPRINT`，未配置时跳过且构建继续 |
+| 当前证书 | 自签名测试证书 `CN=Kaixin Assistant Self-Signed`，指纹 `966F4BAB005D43DB4D85479F38A3625FC9BBF2F9`，2029-11-25 到期；PFX 与密码在 `%USERPROFILE%\.tauri\codesign\`，已写入用户环境变量 `KAIXIN_SIGN_PFX` / `KAIXIN_SIGN_PFX_PASSWORD` |
+| 信任范围 | 仅本机 CurrentUser 的「受信任的根」与「受信任的发布者」；其他机器仍会提示未知发布者 |
+| 构建后补签 | `npm run sign:artifacts`：对 release 主程序与 sidecar 兜底签名（Tauri 的 signCommand 对 release 副本可能被覆盖）；分发包以 `setup.exe` 的签名为准 |
+| 换正式证书 | 购买 OV/EV 证书或接入 Azure Trusted Signing 后，替换 `KAIXIN_SIGN_PFX` / `KAIXIN_SIGN_PFX_PASSWORD`（或 `KAIXIN_SIGN_THUMBPRINT`）即可，签名流程与脚本不变 |
+| 生成清单 | `npm run make:latest -- --notes "本次更新说明"` |
+| 构建签名环境变量 | `TAURI_SIGNING_PRIVATE_KEY`（内容或文件路径）、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
+
 ### 发布流程
 
+```powershell
+# 0. 证书与更新私钥（CI 里用密钥注入，不要写进仓库）
+$env:KAIXIN_SIGN_PFX = "C:\path\to\code-sign.pfx"
+$env:KAIXIN_SIGN_PFX_PASSWORD = "***"
+$env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\<user>\.tauri\kaixin-desktop.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "***"
+
+# 1. 构建：前端 → cargo release → NSIS 打包 → minisign 签名
+npm run tauri build
+
+# 2. 兜底补签主程序与 sidecar（Tauri 对 release 副本可能不落签）
+npm run sign:artifacts
+
+# 3. 校验 Authenticode（应为 Valid）
+Get-AuthenticodeSignature src-tauri/target/release/bundle/nsis/KaixinAssistant_<version>_x64-setup.exe
+
+# 4. 生成更新清单
+npm run make:latest -- --notes "本次更新说明"
+
+# 5. 上传 exe + .sig + latest.json 到更新服务器
 ```
-1. npm run tauri build
-2. 产物在 src-tauri/target/release/bundle/nsis/
-     AgentPlatform_0.1.0_x64-setup.exe
-     AgentPlatform_0.1.0_x64-setup.exe.sig
-3. 跑 npm run make:latest 生成 latest.json
-4. 把 exe + sig + latest.json 上传到更新服务器
+
+产物在 `src-tauri/target/release/bundle/nsis/`：
+
 ```
+KaixinAssistant_<version>_x64-setup.exe
+KaixinAssistant_<version>_x64-setup.exe.sig
+latest.json
+```
+
+### 安装与快捷方式（必须走安装器）
+
+- **升级一律用 `setup.exe` 覆盖安装**：交互双击，或静默 `setup.exe /S`。不要手工把 exe 复制到安装目录。
+- 安装器负责写入：程序目录、**桌面快捷方式**、开始菜单项、卸载项（`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\KaixinAssistant`）与版本信息。
+- 手工复制只替换主程序，不会创建或更新快捷方式、开始菜单和卸载信息。此前桌面一直没有快捷方式，就是因为更新时只复制了 exe、从未运行安装器。
+- 快捷方式名称取 `productName`（当前 `KaixinAssistant`）。要显示中文名，改 `tauri.conf.json` 的 `productName` 后重新打包；已安装的机器也可直接重命名 `.lnk`。
+- 静默安装后自检：`Get-ChildItem "$env:USERPROFILE\Desktop" -Filter *.lnk`，并读取目标的 `TargetPath` 确认指向 `kaixin-desktop.exe`。
 
 `latest.json` 结构：
 
