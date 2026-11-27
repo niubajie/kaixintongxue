@@ -8,11 +8,15 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "make:latest": "node scripts/make-latest-json.mjs",
+    "sign:artifacts": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-release.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

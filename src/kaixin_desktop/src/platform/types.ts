@@ -6,8 +6,31 @@ export type PlatformKind = "tauri" | "web";
 /** 本地 Go sidecar 的默认端口（浏览器环境或 sidecar 启动失败时使用）。 */
 export const DEFAULT_LOCAL_PORT = 5085;
 
+/** 一次更新检查的结果。 */
+export interface UpdateCheckResult {
+  available: boolean;
+  currentVersion: string;
+  /** 有新版本时才有值 */
+  version?: string;
+  /** 发布说明（来自 latest.json 的 notes） */
+  notes?: string;
+}
+
+export interface UpdaterBridge {
+  readonly supported: boolean;
+  /** 拉取更新清单；无新版本时 available=false，不抛错。 */
+  check(): Promise<UpdateCheckResult>;
+  /** 下载并安装已检查到的版本；onProgress 收到累计字节与总字节（总数可能未知）。 */
+  downloadAndInstall(onProgress?: (downloadedBytes: number, totalBytes?: number) => void): Promise<void>;
+  /** 安装完成后重启应用。 */
+  relaunch(): Promise<void>;
+}
+
 export interface DesktopBridge {
   readonly kind: PlatformKind;
+
+  /** 自动更新：检查清单、下载安装（安装包经 minisign 验签）、重启生效。 */
+  readonly updater: UpdaterBridge;
 
   readonly capabilities: {
     windowControls: boolean;
@@ -20,6 +43,8 @@ export interface DesktopBridge {
     pickFiles: boolean;
     /** 能否用系统默认浏览器打开外部链接（微信扫码登录用） */
     openExternal: boolean;
+    /** 是否支持应用内自动更新（仅桌面端为真） */
+    updater: boolean;
   };
 
   getAppVersion(): Promise<string>;

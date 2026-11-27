@@ -12,9 +12,16 @@ let baseUrl: string | null = null;
 // 否则网页端产物会被 Tauri 代码污染（AGENTS.md 第 6 节）。
 async function getBaseUrl(): Promise<string> {
   if (baseUrl) return baseUrl;
-  const port = await bridge.getLocalServicePort();
-  baseUrl = `http://127.0.0.1:${port}`;
-  return baseUrl;
+  // sidecar 由 Tauri 异步启动，页面可能先加载；端口为 0 时短暂等待，避免把 0 缓存进 baseUrl。
+  for (let i = 0; i < 20; i += 1) {
+    const port = await bridge.getLocalServicePort();
+    if (port > 0) {
+      baseUrl = `http://127.0.0.1:${port}`;
+      return baseUrl;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  throw new Error("本地服务尚未就绪，请稍后重试。");
 }
 
 export interface DiskInfo {
@@ -226,63 +233,6 @@ export async function cancelDeploy(): Promise<{ state: string }> {
 }
 
 
-// ---------- 自定义技能（落本地库，见 docs/08 第 11 节） ----------
-
-export interface CustomSkillRecord {
-  category?: string;
-  id: string;
-  name: string;
-  description: string;
-  softwareIds: string[];
-  siteIds: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function listCustomSkills(): Promise<CustomSkillRecord[]> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/skills/custom`);
-  if (!response.ok) {
-    throw new Error(`读取本地技能失败（HTTP ${response.status}）`);
-  }
-  const payload = (await response.json()) as { skills?: CustomSkillRecord[] };
-  return payload.skills ?? [];
-}
-
-export async function saveCustomSkill(input: {
-  id?: string;
-  name: string;
-  description: string;
-  category?: string;
-  softwareIds: string[];
-  siteIds: string[];
-}): Promise<CustomSkillRecord> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/skills/custom`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-  const payload = (await response.json().catch(() => null)) as
-    | { skill?: CustomSkillRecord; message?: string }
-    | null;
-  if (!response.ok || !payload?.skill) {
-    throw new Error(payload?.message ?? `保存到本地库失败（HTTP ${response.status}）`);
-  }
-  return payload.skill;
-}
-
-export async function deleteCustomSkill(id: string): Promise<void> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/skills/custom/${encodeURIComponent(id)}`, {
-    method: "DELETE"
-  });
-  if (!response.ok && response.status !== 404) {
-    throw new Error(`删除本地技能失败（HTTP ${response.status}）`);
-  }
-}
-
-
 // ---------- 网站寻址（从需求推导到具体页面） ----------
 
 export interface ResolveSiteBrief {
@@ -488,6 +438,10 @@ export interface PendingDoc {
   category: string;
   subCategory: string;
   snippet: string;
+  // scheduleId 是产生这条资料的定时任务，手动搜集为空。
+  scheduleId: string;
+  // localPath 是下载到本地临时资料库的文件路径，预览直接打开它。
+  localPath: string;
   createdAt: string;
 }
 
@@ -510,9 +464,10 @@ export async function collectFromWeb(input: {
   return payload;
 }
 
-export async function fetchPendingDocs(): Promise<PendingDoc[]> {
+export async function fetchPendingDocs(scheduleId?: string): Promise<PendingDoc[]> {
   const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/library/pending`);
+  const query = scheduleId ? `?scheduleId=${encodeURIComponent(scheduleId)}` : "";
+  const response = await fetch(`${base}/api/library/pending${query}`);
   if (!response.ok) {
     throw new Error(`读取待审核资料失败（HTTP ${response.status}）`);
   }
@@ -520,8 +475,21 @@ export async function fetchPendingDocs(): Promise<PendingDoc[]> {
   return payload.items;
 }
 
-export async function approvePendingDoc(id: string): Promise<{ path: string; relPath: string; category: string }> {
+/** 用系统默认浏览器打开待审核资料的原文链接。 */
+export async function openExternalUrl(url: string): Promise<void> {
   const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/open-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `打开链接失败（HTTP ${response.status}）`);
+  }
+}
+
+export async function approvePendingDoc(id: string): Promise<{ path: string; relPath: string; category: string }> {  const base = await getBaseUrl();
   const response = await fetch(`${base}/api/library/pending/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -549,7 +517,7 @@ export async function rejectPendingDoc(id: string): Promise<void> {
   }
 }
 
-export type ScheduleFreq = "daily" | "weekly" | "monthly";
+export type ScheduleFreq = "instant" | "daily" | "weekly" | "monthly";
 
 export interface SearchSchedule {
   id: string;
@@ -560,9 +528,47 @@ export interface SearchSchedule {
   hour: number;
   weekday: number;
   day: number;
+  weekdays: number[];
+  days: number[];
+  /** 资料选项：电子书 / 文档 / 视频 / 杂志 / 留言 / 全部 */
+  types: string[];
+  /** 本次任务搜索的网站（来自网站设置），空表示全部启用网站 */
+  siteIds: string[];
+  /** 发布时间：1d / 3d / 1w / 1m / 3m，空表示不限 */
+  publishWithin: string;
+  /** 单轮下载总大小上限（字节）；0 表示不下载任何资料 */
+  downloadLimitBytes: number;
   enabled: boolean;
+  /** 累计搜集到的资料数量 */
+  collected: number;
+  /** 本轮是否正在搜索（内存状态，重启后为 false） */
+  running: boolean;
+  // search / download / repair：任务当前阶段，卡片据此显示搜索、下载或修复状态。
+  phase?: string;
+  /** 自动修复后需要用户处理的事项 */
+  issueKind?: "login" | "failed";
+  issueSiteId?: string;
+  issueMessage?: string;
+  /** 失败原因代码，前端据此给针对性提示（captcha / no_results / stall / exhausted 等） */
+  issueFailureCode?: string;
+  /** 运行/重试序号，同一条错误的新一轮会自增，避免去重导致不再弹修复 */
+  issueNonce?: number;
   lastRunAt: string;
   createdAt: string;
+}
+
+/** 暂停 / 开始：暂停后调度器不再触发该任务。 */
+export async function setScheduleEnabled(id: string, enabled: boolean): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/schedules/${encodeURIComponent(id)}/enabled`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `更新任务状态失败（HTTP ${response.status}）`);
+  }
 }
 
 export async function fetchSchedules(): Promise<SearchSchedule[]> {
@@ -608,6 +614,7 @@ export interface SearchSite {
   domain: string;
   enabled: boolean;
   createdAt: string;
+  hasCookie: boolean;
 }
 
 export async function fetchSites(): Promise<SearchSite[]> {
@@ -618,6 +625,33 @@ export async function fetchSites(): Promise<SearchSite[]> {
   }
   const payload = (await response.json()) as { items: SearchSite[] };
   return payload.items;
+}
+
+export interface SiteVerifyResult {
+  ok: boolean;
+  message: string;
+  hint?: string;
+  domain: string;
+  // 该站要求登录后才放行，前端应弹出「登录助手」。
+  needLogin?: boolean;
+  // 登录助手要打开的页面。
+  loginUrl?: string;
+}
+
+// 验证网站能否真正下载到资料（拿不到可下载文件即判无效）。
+export async function verifySite(domain: string, keyword?: string, signal?: AbortSignal): Promise<SiteVerifyResult> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain, keyword: keyword ?? "" }),
+    signal
+  });
+  const payload = (await response.json().catch(() => null)) as (SiteVerifyResult & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `验证网站失败（HTTP ${response.status}）`);
+  }
+  return payload;
 }
 
 export async function saveSite(input: {
@@ -653,6 +687,125 @@ export async function deleteSite(id: string): Promise<SearchSite[]> {
     throw new Error(payload?.message ?? `删除网站失败（HTTP ${response.status}）`);
   }
   return payload.items;
+}
+
+// ---------- 网站登录助手 ----------
+
+export interface SiteLoginStatus {
+  state: "idle" | "starting" | "waiting" | "success" | "failed" | "closed";
+  message: string;
+}
+
+// 打开一个有头浏览器窗口，让用户自己完成登录；检测到登录态后自动保存。
+export async function startSiteLogin(id: string): Promise<{ state: string }> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  const payload = (await response.json().catch(() => null)) as { state?: string; message?: string } | null;
+  if (!response.ok) {
+    throw new Error(payload?.message ?? `打开登录窗口失败（HTTP ${response.status}）`);
+  }
+  return { state: payload?.state ?? "starting" };
+}
+
+export async function fetchSiteLoginStatus(id: string): Promise<SiteLoginStatus> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites/login/status?id=${encodeURIComponent(id)}`);
+  const payload = (await response.json().catch(() => null)) as SiteLoginStatus | null;
+  if (!response.ok || !payload) {
+    throw new Error(`查询登录状态失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+// 兜底：用户手动确认已登录，直接保存当前浏览器里的 Cookie。
+export async function finishSiteLogin(id: string): Promise<void> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites/login/finish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `保存登录信息失败（HTTP ${response.status}）`);
+  }
+}
+
+// ---------- 分步网站修复向导 ----------
+
+export type SiteAssistState =
+  | "starting" | "awaiting_open" | "detecting_search" | "searching"
+  | "awaiting_entry_choice" | "awaiting_search_url" | "login_waiting"
+  | "login_verifying" | "ready" | "downloading" | "failed" | "closed";
+
+export interface SiteAssistStatus {
+  sessionId: string;
+  siteId: string;
+  scheduleId?: string;
+  state: SiteAssistState;
+  message: string;
+  keyword: string;
+  entryUrl: string;
+  resultCount: number;
+  downloadReady: boolean;
+  /** 失败原因代码（captcha / no_results / no_search_box / submit_blocked / no_usable 等），前端据此给针对性提示 */
+  failureCode?: string;
+}
+
+async function siteAssistRequest(path: string, body?: unknown): Promise<SiteAssistStatus> {
+  const base = await getBaseUrl();
+  const response = await fetch(`${base}/api/library/sites/assist/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const payload = (await response.json().catch(() => null)) as (SiteAssistStatus & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.message ?? `网站修复操作失败（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export function startSiteAssist(siteId: string, keyword: string, scheduleId?: string): Promise<SiteAssistStatus> {
+  return siteAssistRequest("start", { siteId, keyword, scheduleId: scheduleId ?? "" });
+}
+
+export function fetchSiteAssistStatus(sessionId: string): Promise<SiteAssistStatus> {
+  return siteAssistRequest(`status?sessionId=${encodeURIComponent(sessionId)}`);
+}
+
+export function confirmSiteAssistOpen(sessionId: string, opened: boolean): Promise<SiteAssistStatus> {
+  return siteAssistRequest("open", { sessionId, opened });
+}
+
+export function chooseSiteAssistEntry(sessionId: string, decision: "advanced" | "provideUrl" | "unsupported"): Promise<SiteAssistStatus> {
+  return siteAssistRequest("search-entry", { sessionId, decision });
+}
+
+export function submitSiteAssistSearchURL(sessionId: string, url: string): Promise<SiteAssistStatus> {
+  return siteAssistRequest("search-url", { sessionId, url });
+}
+
+export function beginSiteAssistLogin(sessionId: string): Promise<SiteAssistStatus> {
+  return siteAssistRequest("login", { sessionId });
+}
+
+export function confirmSiteAssistLogin(sessionId: string): Promise<SiteAssistStatus> {
+  return siteAssistRequest("login-confirm", { sessionId });
+}
+
+/** 在同一个浏览器窗口里重新搜索（保留用户已完成的验证码 / 登录状态）。 */
+export function retrySiteAssist(sessionId: string): Promise<SiteAssistStatus> {
+  return siteAssistRequest("retry", { sessionId });
+}
+
+/** 关闭修复会话；giveUp=true 表示用户明确放弃本站修复（不再自动重开）。 */
+export async function cancelSiteAssist(sessionId: string, options?: { giveUp?: boolean }): Promise<void> {
+  await siteAssistRequest("cancel", { sessionId, giveUp: options?.giveUp ?? false });
 }
 
 // ---------- 本地知识库 ----------
@@ -929,35 +1082,6 @@ export async function testServer(): Promise<ServerTestResult> {
 
 
 
-// ---------- 续装与单步重试（FR-SKL-18） ----------
-
-export async function resumeDeploy(runId: string): Promise<void> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/deploy/resume`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runId })
-  });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(payload?.message ?? `续装失败（HTTP ${response.status}）`);
-  }
-}
-
-export async function retryDeployStep(runId: string, order: number): Promise<void> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/deploy/retry`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runId, order })
-  });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(payload?.message ?? `重试失败（HTTP ${response.status}）`);
-  }
-}
-
-
 // ---------- 知识库版本历史 ----------
 
 export interface KBRevision {
@@ -1039,70 +1163,6 @@ export async function signOut(): Promise<void> {
 }
 
 
-// ---------- 检查更新与下载安装（UPD-02 / UPD-03） ----------
-
-export interface UpdateAvailability {
-  configured: boolean;
-  available: boolean;
-  current: string;
-  latest: string;
-  fileName: string;
-  sizeBytes: number;
-  sha256: string;
-  notes: string;
-  message: string;
-}
-
-export interface UpdateDownloadResult {
-  ok: boolean;
-  path: string;
-  fileName: string;
-  sizeBytes: number;
-  verified: boolean;
-  message: string;
-}
-
-export async function fetchUpdateAvailable(current: string): Promise<UpdateAvailability> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/update/available?current=${encodeURIComponent(current)}`);
-  if (!response.ok) {
-    throw new Error(`检查更新失败（HTTP ${response.status}）`);
-  }
-  return (await response.json()) as UpdateAvailability;
-}
-
-export async function downloadUpdate(
-  version: string,
-  fileName: string,
-  sha256: string
-): Promise<UpdateDownloadResult> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/update/download`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ version, fileName, sha256 })
-  });
-  const payload = (await response.json().catch(() => null)) as (UpdateDownloadResult & { message?: string }) | null;
-  if (!response.ok || !payload) {
-    throw new Error(payload?.message ?? `下载失败（HTTP ${response.status}）`);
-  }
-  return payload;
-}
-
-export async function installUpdate(path: string): Promise<void> {
-  const base = await getBaseUrl();
-  const response = await fetch(`${base}/api/update/install`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path })
-  });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(payload?.message ?? `启动安装包失败（HTTP ${response.status}）`);
-  }
-}
-
-
 // ---------- 电脑检测（FR-GLB-07） ----------
 
 export interface ComputerStatus {
@@ -1139,7 +1199,7 @@ export interface DataLocation {
 }
 
 export interface DataInfo {
-  store: { path: string; sizeKb: number; customSkills: number; deployRuns: number; schemaVersion: number };
+  store: { path: string; sizeKb: number; schemaVersion: number };
   location: DataLocation;
 }
 

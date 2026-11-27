@@ -238,12 +238,18 @@ npm run build
 | 能力判定 ✅ / ⚠️ / ❌ | `docs/00` 底部的统计数字（19 项里可做 X / 降级 Y / 放弃 Z） |
 | 路线图阶段 | **只在 `docs/04` 改**，其他地方引用，不另写一份 |
 | 技术选型（语言 / 框架 / 壳） | grep 旧技术名，见 9.5 |
-| 文档版本号 | ① 头部「版本 vX」② 变更记录加一行 ③ Word 封面版本 ④ `build_plan_docx.py` 的 `REVISIONS` |
-| 新增一个模块 | 新建 `docs/0X` + 在 `docs/04` 路线图加阶段 + 加进 `CHAPTERS` 列表 |
+| 文档版本号 | ① 头部「版本 vX」② 变更记录加一行 ③ `build_plan_docx.py` 的 `VERSION` 与 `REVISIONS`（Word 封面随脚本生成，不手改） |
+| 新增一个模块 | 新建 `docs/0X` + 在 `docs/04` 路线图加阶段 + 加进 `build_plan_docx.py` 的 `CHAPTERS`，并同步 `VERSION` / `REVISIONS` |
 
 ### 9.4 改完必须重新生成 Word
 
-**禁止直接编辑 `.docx`。** 正确流程：
+**禁止直接编辑 `.docx`。** 仓库根目录三个脚本分工固定：
+
+| 脚本 | 职责 |
+|---|---|
+| `build_plan_docx.py` | 读 `docs/00–17` 合成 Word；负责封面、目录域、页眉页脚、标题层级、表格、代码块 |
+| `verify_docx.py` | 校验 H1 章节数（= `CHAPTERS` 数量 + 附录 A）、表格数、空表、段落数 |
+| `check_docx_text.py` | 检查正文与表格的 Markdown 残留（`CodeBlock` 样式除外） |
 
 ```bash
 python build_plan_docx.py
@@ -253,9 +259,15 @@ python check_docx_text.py "docs/开心同学AI助手-技术方案书.docx"
 
 三条都要过：
 
-- `build` 无报错
-- `verify` 的章节数 / 表格数符合预期，`空表: 0`
-- `check` 除代码块外无 `**`、反引号、`](` 等 Markdown 残留
+- `build` 无报错；输出里 `chapters` 等于 `CHAPTERS` 数量，`tables` 不应比上一版明显减少
+- `verify` 为 `OK`，`empty_tables=0`，`h1 = len(CHAPTERS) + 1`
+- `check` 为 `OK: 无 Markdown 残留`
+
+**失败处理**：`verify` / `check` 不通过时，只改 Markdown 源再重跑。禁止手改 `.docx`，也禁止放宽检查脚本（加白名单、调低阈值）来绕过。
+
+**版本与章节**：`VERSION`、`REVISIONS`、`CHAPTERS` 都在 `build_plan_docx.py` 顶部。新增或下线章节必须同步 `CHAPTERS`；改版本必须同时改 `VERSION`、`REVISIONS` 与各文档头部。
+
+**交付**：对外提供时，生成后把 `docs/` 下的产物复制到桌面，旧文件先备份；不要反向以桌面文件为源。
 
 ### 9.5 提交前自检（三条 grep）
 
@@ -273,6 +285,7 @@ grep -rn "v1\.[0-9]" docs/*.md
 1. 改判定 → 同步统计数字
 2. 改路线 → 只改 docs/04，别处引用
 3. 换技术 → grep 旧技术名，逐一处理命中
-4. 改版本 → 四处同步（头部 / 变更记录 / Word 封面 / REVISIONS）
-5. 改完   → 重跑 build → verify → check
+4. 改版本 → 四处同步（头部 / 变更记录 / build_plan_docx.py 的 VERSION 与 REVISIONS / Word 封面由脚本生成）
+5. 改完   → 重跑 build → verify → check，三条全过
+6. 交付   → 复制 docs 产物到桌面并备份旧版；目录页码在 Word 中「更新域」
 ```

@@ -297,9 +297,12 @@ func (a *App) handleLibraryOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := a.resolveLibraryRoot()
+	// 允许打开资料目录内的文件，以及本地临时资料库里的待审核资料文件。
 	if err := ensureInside(root, request.Path); err != nil {
-		fail(w, http.StatusForbidden, err.Error())
-		return
+		if pendingDir := a.pendingFilesDir(); pendingDir == "" || ensureInside(pendingDir, request.Path) != nil {
+			fail(w, http.StatusForbidden, err.Error())
+			return
+		}
 	}
 	if _, err := os.Stat(request.Path); err != nil {
 		fail(w, http.StatusNotFound, "文件不存在或已被移动")
@@ -310,6 +313,28 @@ func (a *App) handleLibraryOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"state": "opened", "path": request.Path})
+}
+
+// handleLibraryOpenURL：用系统默认浏览器打开待审核资料的原网页（只允许 http/https）。
+func (a *App) handleLibraryOpenURL(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		URL string `json:"url"`
+	}
+	if err := decodeJSON(r, &request); err != nil || strings.TrimSpace(request.URL) == "" {
+		fail(w, http.StatusBadRequest, "缺少链接")
+		return
+	}
+	target := strings.TrimSpace(request.URL)
+	lower := strings.ToLower(target)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		fail(w, http.StatusBadRequest, "只支持 http / https 链接")
+		return
+	}
+	if err := openPath(target); err != nil {
+		fail(w, http.StatusInternalServerError, "打开链接失败："+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"state": "opened", "url": target})
 }
 
 func (a *App) handleLibraryOpenFolder(w http.ResponseWriter, r *http.Request) {

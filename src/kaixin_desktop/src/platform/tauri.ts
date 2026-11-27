@@ -2,7 +2,12 @@
 // 关键约束：@tauri-apps/* 全部用动态 import，
 // 否则将来打成 Web 版时会把 Tauri 代码混进产物。
 
-import { DEFAULT_LOCAL_PORT, type DesktopBridge } from "./types";
+import type { Update } from "@tauri-apps/plugin-updater";
+import { DEFAULT_LOCAL_PORT, type DesktopBridge, type UpdateCheckResult } from "./types";
+
+// check() 返回的更新对象要在 downloadAndInstall 时复用；
+// type-only import 只参与编译，不会把插件代码打进 Web 产物。
+let pendingUpdate: Update | null = null;
 
 async function currentWindow() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -19,7 +24,51 @@ export function createTauriBridge(): DesktopBridge {
       localService: true,
       pickFolder: true,
     openExternal: true,
-      pickFiles: true
+      pickFiles: true,
+      updater: true
+    },
+
+    updater: {
+      supported: true,
+
+      async check(): Promise<UpdateCheckResult> {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        pendingUpdate = await check();
+        if (pendingUpdate) {
+          return {
+            available: true,
+            currentVersion: pendingUpdate.currentVersion,
+            version: pendingUpdate.version,
+            notes: pendingUpdate.body ?? undefined
+          };
+        }
+        const { invoke } = await import("@tauri-apps/api/core");
+        return { available: false, currentVersion: await invoke<string>("app_version") };
+      },
+
+      async downloadAndInstall(
+        onProgress?: (downloadedBytes: number, totalBytes?: number) => void
+      ): Promise<void> {
+        if (!pendingUpdate) {
+          throw new Error("请先检查更新");
+        }
+        let total: number | undefined;
+        let downloaded = 0;
+        // 安装包由 updater 用内置公钥做 minisign 验签，验签失败会在这里抛错。
+        await pendingUpdate.downloadAndInstall((event) => {
+          if (event.event === "Started") {
+            total = event.data.contentLength;
+          } else if (event.event === "Progress") {
+            downloaded += event.data.chunkLength;
+            onProgress?.(downloaded, total);
+          }
+        });
+      },
+
+      async relaunch(): Promise<void> {
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      }
     },
 
     async getAppVersion(): Promise<string> {

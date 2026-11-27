@@ -71,6 +71,10 @@ fn ensure_voice_dlls(app: &AppHandle) {
     let mut candidates = vec![
         exe_dir.join("dlls"),
         exe_dir.join("resources").join("dlls"),
+        // 打包后：<安装目录>/binaries/dlls
+        exe_dir.join("binaries").join("dlls"),
+        // dev 下：<src-tauri>/target/debug → <src-tauri>/binaries/dlls
+        exe_dir.join("..").join("..").join("binaries").join("dlls"),
     ];
     if let Ok(dir) = app.path().resource_dir() {
         candidates.push(dir.join("dlls"));
@@ -168,6 +172,9 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        // 自动更新：清单与安装包均由 minisign 验签（公钥在 tauri.conf.json）。
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let handle = app.handle().clone();
             let service = LocalService {

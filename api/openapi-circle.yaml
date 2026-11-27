@@ -1,0 +1,461 @@
+openapi: 3.1.0
+info:
+  title: 1个亿资源圈 AI 助手 - 服务端接口契约
+  version: 0.2.0
+  description: |
+    新版独立服务（server/，Go + Gin）的唯一接口真相源。
+    与桌面端旧 sidecar 的 api/openapi.yaml 相互独立。
+
+    统一响应体：{ code, message, data, traceId }
+    - 成功 code = 0
+    - 失败 code != 0，HTTP 状态码同时正确
+    - 永不裸返回数组
+
+    错误码分段：
+      0 成功；10000–19999 通用；20000–29999 用户与认证；
+      30000–39999 资源；40000–49999 对话；50000–59999 知识库；60000–69999 计费。
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/health:
+    get:
+      summary: 健康检查
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/v1/auth/wx-login:
+    post:
+      summary: 微信小程序登录（wx.login code 换会话）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+                deviceHash: { type: string }
+                clientApp: { type: string, enum: [mini, android, web] }
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TokenPair"
+        "429":
+          description: 同 IP 24h 注册超限（20003）
+  /api/v1/auth/refresh:
+    post:
+      summary: 刷新令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+                deviceHash: { type: string }
+      responses:
+        "200":
+          description: 新令牌
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+  /api/v1/auth/logout:
+    post:
+      summary: 注销当前会话
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+  /api/v1/account/bind-phone:
+    post:
+      summary: 绑定手机号（服务端加密存储）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: wx.getPhoneNumber 返回的 code }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/v1/categories:
+    get:
+      summary: 分类列表（仅启用，按排序）
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: "#/components/schemas/Category" }
+
+  /api/v1/resources:
+    get:
+      summary: 公开资源列表（仅 online、未过期、分类启用；脱敏）
+      security: []
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: region, in: query, schema: { type: string } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: size, in: query, schema: { type: integer, maximum: 50, default: 20 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: "#/components/schemas/ResourceItem" }
+    post:
+      summary: 提交资源（进入 pending 待审核）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateResourceRequest" }
+      responses:
+        "200":
+          description: 提交成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        "409":
+          description: 疑似重复（30002），可带 force=true 重试
+  /api/v1/resources/{uuid}:
+    get:
+      summary: 资源详情（脱敏，含分类免责声明，不含联系方式）
+      security: []
+      parameters:
+        - { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/ResourceDetail" }
+        "404":
+          description: 资源不存在或已下架（30001）
+    delete:
+      summary: 本人删除资源（软删除）
+      parameters:
+        - { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+  /api/v1/resources/{uuid}/offline:
+    post:
+      summary: 本人下架资源
+      parameters:
+        - { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: 状态不允许（30003）
+  /api/v1/my/resources:
+    get:
+      summary: 我的资源列表
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/v1/admin/auth/login:
+    post:
+      summary: 后台登录（argon2id 校验）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: 用户名或密码错误
+  /api/v1/admin/categories:
+    get:
+      summary: 后台分类列表（含停用）
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+  /api/v1/admin/categories/{code}:
+    patch:
+      summary: 修改分类启停/排序/定价（写审计）
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                sortOrder: { type: integer }
+                contactPriceCents: { type: integer, minimum: 0 }
+                accessPriceCents: { type: integer, minimum: 0 }
+                sensitiveLevel: { type: string, enum: [low, medium, high, extreme] }
+                disclaimerText: { type: string }
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/resources:
+    get:
+      summary: 后台资源审核列表（全状态）
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [draft, pending, online, rejected, offline, expired] } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/resources/{uuid}/review:
+    post:
+      summary: 审核资源（approve / reject / offline，写审计）
+      parameters:
+        - { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, reject, offline] }
+                reason: { type: string, description: reject 必填 }
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: 状态冲突（30003）
+  /api/v1/admin/users:
+    get:
+      summary: 后台用户列表（不含手机号明文）
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, blocked, pending_delete] } }
+        - { name: riskLevel, in: query, schema: { type: string, enum: [normal, low, medium, high] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/users/{uuid}/status:
+    patch:
+      summary: 封禁 / 解封用户（写审计）
+      parameters:
+        - { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, blocked] }
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/risk/events:
+    get:
+      summary: 风控事件列表（只读）
+      parameters:
+        - { name: severity, in: query, schema: { type: string, enum: [low, medium, high, critical] } }
+        - { name: eventType, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/settings:
+    get:
+      summary: 系统配置列表（白名单键）
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/settings/{key}:
+    patch:
+      summary: 修改系统配置（写审计）
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/audit-logs:
+    get:
+      summary: 审计日志检索（只读）
+      parameters:
+        - { name: actorType, in: query, schema: { type: string, enum: [user, admin, system] } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: OK
+  /api/v1/admin/audit-logs/verify:
+    get:
+      summary: 校验审计哈希链完整性
+      responses:
+        "200":
+          description: OK
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Envelope:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code: { type: integer, example: 0 }
+        message: { type: string, example: ok }
+        data: {}
+        traceId: { type: string }
+    TokenPair:
+      type: object
+      properties:
+        userId: { type: integer, format: int64 }
+        needPhone: { type: boolean }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresAt: { type: string, format: date-time }
+    Category:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        enabled: { type: boolean }
+        sortOrder: { type: integer }
+        contactPriceCents: { type: integer, format: int64 }
+        accessPriceCents: { type: integer, format: int64 }
+        sensitiveLevel: { type: string, enum: [low, medium, high, extreme] }
+        disclaimerText: { type: string }
+    ResourceItem:
+      type: object
+      properties:
+        uuid: { type: string, format: uuid }
+        categoryCode: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        regionCode: { type: string }
+        providerType: { type: string, enum: [enterprise, individual, broker] }
+        qualityScore: { type: integer }
+        publishedAt: { type: string, format: date-time, nullable: true }
+    ResourceDetail:
+      allOf:
+        - $ref: "#/components/schemas/ResourceItem"
+        - type: object
+          properties:
+            categoryName: { type: string }
+            detailMd: { type: string }
+            disclaimerText: { type: string }
+            contactMode: { type: string, enum: [apply] }
+    CreateResourceRequest:
+      type: object
+      required: [categoryCode, title, contact]
+      properties:
+        categoryCode: { type: string }
+        title: { type: string, minLength: 4, maxLength: 60 }
+        summary: { type: string, maxLength: 200 }
+        detailMd: { type: string, maxLength: 5000 }
+        regionCode: { type: string }
+        providerType: { type: string, enum: [enterprise, individual, broker] }
+        contact:
+          type: object
+          required: [contactName]
+          properties:
+            contactName: { type: string }
+            phone: { type: string }
+            wechat: { type: string }
+        expireDays: { type: integer, minimum: 7, maximum: 365 }
+        force: { type: boolean, description: 疑似重复时确认继续 }

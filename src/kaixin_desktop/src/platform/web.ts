@@ -12,7 +12,21 @@ export const webBridge: DesktopBridge = {
     localService: false,
     pickFolder: false,
     openExternal: true,
-    pickFiles: false
+    pickFiles: false,
+    updater: false
+  },
+
+  updater: {
+    supported: false,
+    async check(): Promise<never> {
+      throw new Error("浏览器环境不支持自动更新，请下载桌面安装包");
+    },
+    async downloadAndInstall(): Promise<never> {
+      throw new Error("浏览器环境不支持自动更新");
+    },
+    async relaunch(): Promise<never> {
+      throw new Error("浏览器环境不支持重启应用");
+    }
   },
 
   async getAppVersion(): Promise<string> {

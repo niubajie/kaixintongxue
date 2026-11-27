@@ -349,6 +349,40 @@ select {
   margin: 16px 0 6px;
 }
 
+/* ---------- 下载大小滑条 ---------- */
+.download-limit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.download-limit-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.download-limit-range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.download-limit-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-2);
+}
+
+.download-limit-scale span.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -631,7 +665,14 @@ input[type="range"] {
 
 .lib-main {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
+
+/* 搜索条固定在看板下方、文件列表上方（DOM 中位于列表之后，用 order 调整视觉顺序） */
+.lib-main > .lib-board { order: 1; }
+.lib-main > .lib-search { order: 2; }
+.lib-main > * { order: 3; }
 
 .library-layout {
   display: grid;
@@ -728,13 +769,7 @@ input[type="range"] {
   padding: 4px 0 8px;
 }
 
-/* 没有待审核资料时，搜索框在标题栏下方剩余空间内上下居中 */
-.lib-search.is-center {
-  min-height: max(220px, calc(100vh - 330px));
-  justify-content: center;
-}
-
-/* 有待审核资料时，搜索框落到靠上三分之一的位置 */
+/* 搜索区位置统一：紧跟数据看板，不再按是否有待审核资料上下跳动 */
 .lib-search.is-top {
   padding-top: 6px;
 }
@@ -807,7 +842,7 @@ input[type="range"] {
 
 .schedule-card {
   padding: 10px 12px;
-  cursor: default;
+  cursor: pointer;
   user-select: none;
 }
 
@@ -821,12 +856,6 @@ input[type="range"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.schedule-meta {
-  margin-top: 3px;
-  font-size: 10.5px;
-  color: var(--text-2);
 }
 
 /* ---------- 本地资料：待审核 ---------- */
@@ -1053,6 +1082,349 @@ input[type="range"] {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+}
+
+/* 定时搜索弹窗：定时设置 / 网页设置 横向标签 */
+.dialog-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 14px;
+  padding-right: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-tab {
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.dialog-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.dialog-pane {
+  min-height: 220px;
+}
+
+.dialog-schedule {
+  position: relative;
+  padding-top: 18px;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.multi-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  min-width: 40px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* 悬停提示：鼠标移到带 data-tip 的胶囊上立即显示说明 */
+.chip[data-tip] {
+  position: relative;
+}
+
+.chip[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(37, 40, 36, 0.92);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* ---------- 定时任务卡：运行状态 / 暂停按钮 / 右键菜单 ---------- */
+.schedule-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.schedule-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.schedule-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/* 搜索动图：放大镜来回移动 + 外圈扫动 */
+.search-anim {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  flex: none;
+}
+
+.search-lens {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  animation: kx-lens 1.1s ease-in-out infinite;
+}
+
+.search-lens::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  width: 5px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+
+.search-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--accent-light);
+  animation: kx-spin 0.9s linear infinite;
+}
+
+/* 下载动图：箭头上下移动 + 托盘 */
+.download-anim {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  flex: none;
+}
+
+.dl-arrow {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+  animation: kx-dl 1s ease-in-out infinite;
+}
+
+.dl-tray {
+  position: absolute;
+  left: 1px;
+  bottom: 0;
+  width: 12px;
+  height: 5px;
+  border: 2px solid var(--accent);
+  border-top: 0;
+  border-radius: 0 0 3px 3px;
+}
+
+@keyframes kx-dl {
+  0%,
+  100% {
+    transform: translateY(-1px) rotate(45deg);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(3px) rotate(45deg);
+    opacity: 1;
+  }
+}
+
+@keyframes kx-lens {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(2px, 2px);
+  }
+}
+
+@keyframes kx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.schedule-toggle {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.context-menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 41;
+  min-width: 116px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(37, 40, 36, 0.14);
+}
+
+.context-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-item:hover {
+  background: var(--hover);
+}
+
+/* ---------- 待审核资料预览 ---------- */
+.lib-pending-row.clickable {
+  cursor: pointer;
+}
+
+.lib-pending-row.clickable:hover {
+  background: var(--surface-2, #f6f7f4);
+}
+
+.dialog-preview {
+  width: 560px;
+  max-width: 92vw;
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 18px 20px 16px;
+}
+
+/* 任务卡点开的待审核框：列表自身滚动，标题区固定 */
+.dialog-task-pending {
+  width: 720px;
+  max-width: 92vw;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px 20px 14px;
+}
+
+.task-pending-list {
+  margin-top: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.preview-title {
+  font-size: 15px;
+  font-weight: 600;
+  padding-right: 28px;
+}
+
+.preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.preview-snippet {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+
+.preview-url {
+  margin-top: 10px;
+  word-break: break-all;
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.context-item.danger {
+  color: #b42318;
+}
+
+.ghost-btn.danger {
+  color: #b42318;
 }
 
 .dialog-actions {
@@ -1792,14 +2164,8 @@ input[type="range"] {
   gap: 12px;
 }
 
-.page-library .lib-search.is-center {
-  min-height: 0;
-  justify-content: flex-start;
-  padding-top: 104px;
-}
-
-.page-library .lib-search.is-top {
-  padding-top: 12px;
+.page-library .lib-search {
+  margin-top: 12px;
 }
 
 .page-library .lib-search-bar {
@@ -1902,10 +2268,6 @@ input[type="range"] {
   .page-library .lib-shell {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  .page-library .lib-search.is-center {
-    padding-top: 24px;
-  }
 }
 
 /* 分类文件列表 */
@@ -1931,7 +2293,7 @@ input[type="range"] {
 
 .page-library .lib-site-row {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) auto auto;
+  grid-template-columns: 80px minmax(0, 1fr) auto auto auto auto;
   gap: 6px;
   align-items: center;
   margin-top: 6px;
@@ -1947,6 +2309,206 @@ input[type="range"] {
   height: 32px;
   padding: 0 10px;
   font-size: 12px;
+}
+
+/* 网站验证按钮：有效时绿底，无效时红底 */
+.page-library .verify-btn {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #d8ddd9);
+  background: #fff;
+  color: var(--text-2, #6b7280);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.page-library .verify-btn:hover:not(:disabled) {
+  border-color: var(--accent, #526b5e);
+  color: var(--accent, #526b5e);
+}
+
+.page-library .verify-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.page-library .verify-btn.ok {
+  background: #2e9e5b;
+  border-color: #2e9e5b;
+  color: #fff;
+  opacity: 1;
+}
+
+.page-library .verify-btn.fail {
+  background: #fdecec;
+  border-color: #f3c9c9;
+  color: #c0392b;
+}
+
+/* 站点已保存登录态的标记 */
+.page-library .site-login-badge {
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #b7e0c6;
+  background: #eef8f1;
+  color: #2e9e5b;
+  white-space: nowrap;
+}
+
+.page-library .site-login-badge.hidden {
+  visibility: hidden;
+}
+
+/* 登录助手弹窗 */
+.dialog-login {
+  max-width: 460px;
+}
+
+.site-assist-dialog {
+  width: 620px;
+  max-width: 94vw;
+}
+
+.assist-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.assist-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2, #6b7280);
+  font-size: 12px;
+}
+
+.assist-step > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  background: var(--subtle, #f3f4f6);
+  font-size: 11px;
+}
+
+.assist-step.active {
+  color: var(--accent, #237a46);
+  font-weight: 600;
+}
+
+.assist-step.active > span,
+.assist-step.done > span {
+  color: #fff;
+  background: var(--accent, #237a46);
+}
+
+.assist-message {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--subtle, #f5f7f6);
+  color: var(--text, #1f2937);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.assist-actions-column {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.assist-url-row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.assist-url-row .text-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.assist-downloading {
+  padding: 18px;
+  color: var(--accent, #237a46);
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .assist-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .assist-url-row {
+    flex-direction: column;
+  }
+}
+
+.dialog-login .login-steps {
+  margin: 10px 0 8px;
+  padding-left: 20px;
+  color: var(--text-2, #4b5563);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+/* 网站验证进度：三个点依次伸缩 */
+.verify-progress-mask,
+.login-assist-mask {
+  z-index: 80;
+}
+
+.dialog-verify {
+  max-width: 340px;
+  padding: 28px;
+  text-align: center;
+}
+
+.verify-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 24px;
+  margin-bottom: 12px;
+}
+
+.verify-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary, #2e9e5b);
+  animation: verify-dot-stretch 1.05s ease-in-out infinite;
+}
+
+.verify-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.verify-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes verify-dot-stretch {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.55);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
 }
 
 /* 定时搜索对话框 · 定时内容 / 网站设置 横排 */
@@ -1971,3 +2533,35 @@ input[type="range"] {
     gap: 14px;
   }
 }
+
+/* ---------- 本地资料：搜索条居中 + 分类收起 ---------- */
+/* 主区撑满页面高度，搜索条在剩余空白里左右、上下居中 */
+.page-library {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-library .lib-shell {
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+/* 左栏仍然只占内容高度，不跟随整页拉长 */
+.page-library .lib-rail {
+  align-self: start;
+}
+
+.page-library .lib-search {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* 「全部资料」前的展开 / 收起箭头 */
+.page-library .rail-caret {
+  display: inline-block;
+  margin-right: 5px;
+  font-size: 9px;
+  color: var(--muted);
+}
+

@@ -1,17 +1,12 @@
 import { useEffect, useState } from "react";
 import { bridge } from "../platform";
-import {
-  downloadUpdate,
-  fetchUpdateAvailable,
-  installUpdate,
-  type UpdateAvailability
-} from "../deployApi";
+import type { UpdateCheckResult } from "../platform/types";
 
 interface Props {
   onNotice: (message: string) => void;
 }
 
-type Phase = "idle" | "checking" | "downloading" | "downloaded";
+type Phase = "idle" | "checking" | "downloading" | "installed";
 
 const HISTORY_NOTES: { version: string; date: string; note: string }[] = [
   { version: "0.5.0", date: "11-15", note: "新增历史任务入口，精简导航与对话框" },
@@ -35,10 +30,13 @@ function formatSize(bytes: number): string {
 export function UpdatePage({ onNotice }: Props) {
   const [version, setVersion] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
-  const [result, setResult] = useState<UpdateAvailability | null>(null);
+  const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [error, setError] = useState("");
-  const [downloadedPath, setDownloadedPath] = useState("");
   const [checkedAt, setCheckedAt] = useState("");
+  const [downloaded, setDownloaded] = useState(0);
+  const [total, setTotal] = useState(0);
+
+  const supported = bridge.updater.supported;
 
   useEffect(() => {
     let alive = true;
@@ -59,14 +57,19 @@ export function UpdatePage({ onNotice }: Props) {
   };
 
   const check = async () => {
+    if (!supported) {
+      setError("当前环境不支持应用内更新，请下载桌面安装包后覆盖安装。");
+      return;
+    }
     setPhase("checking");
     setError("");
     setResult(null);
-    setDownloadedPath("");
+    setDownloaded(0);
+    setTotal(0);
     try {
-      const res = await fetchUpdateAvailable(version || "0.0.0");
+      const res = await bridge.updater.check();
       setResult(res);
-      onNotice(res.message);
+      onNotice(res.available ? `发现新版本 ${res.version ?? ""}` : `已是最新版本 ${res.currentVersion}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "检查更新失败");
     } finally {
@@ -75,39 +78,45 @@ export function UpdatePage({ onNotice }: Props) {
     }
   };
 
-  const download = async () => {
-    if (!result) {
-      return;
-    }
+  const install = async () => {
     setPhase("downloading");
     setError("");
     try {
-      const res = await downloadUpdate(result.latest, result.fileName, result.sha256);
-      setDownloadedPath(res.path);
-      setPhase("downloaded");
-      onNotice(`安装包已下载并校验通过：${formatSize(res.sizeBytes)}`);
+      await bridge.updater.downloadAndInstall((bytes, size) => {
+        setDownloaded(bytes);
+        if (size) {
+          setTotal(size);
+        }
+      });
+      setPhase("installed");
+      onNotice("更新已安装，重启应用后生效。");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "下载失败");
+      setError(err instanceof Error ? err.message : "下载或安装失败");
       setPhase("idle");
     }
   };
 
-  const install = async () => {
-    if (!downloadedPath) {
-      return;
-    }
+  const restart = async () => {
     try {
-      await installUpdate(downloadedPath);
-      onNotice("已启动安装包，请按提示完成升级，之后重新打开应用生效。");
+      await bridge.updater.relaunch();
     } catch (err: unknown) {
-      onNotice(err instanceof Error ? err.message : "启动安装包失败");
+      onNotice(err instanceof Error ? err.message : "重启应用失败，请手动重新打开");
     }
   };
 
   // 三态互斥：检查失败 / 有新版本 / 已是最新（UPD-02）
   const badge = (() => {
+    if (!supported) {
+      return { text: "当前环境不支持", cls: "tag" };
+    }
     if (phase === "checking") {
       return { text: "检查中…", cls: "tag" };
+    }
+    if (phase === "downloading") {
+      return { text: "下载中…", cls: "tag accent" };
+    }
+    if (phase === "installed") {
+      return { text: "待重启", cls: "tag accent" };
     }
     if (error) {
       return { text: "检查失败", cls: "tag" };
@@ -116,19 +125,18 @@ export function UpdatePage({ onNotice }: Props) {
       return { text: "未检查", cls: "tag" };
     }
     if (result.available) {
-      return { text: `发现 ${result.latest}`, cls: "tag accent" };
-    }
-    if (!result.configured) {
-      return { text: "未配置服务器", cls: "tag" };
+      return { text: `发现 ${result.version ?? "新版本"}`, cls: "tag accent" };
     }
     return { text: "已是最新", cls: "tag accent" };
   })();
+
+  const percent = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
 
   return (
     <div className="page">
       <div className="page-narrow">
         <h1 className="page-title">版本更新</h1>
-        <p className="page-subtitle">检查新版本、下载安装包并升级</p>
+        <p className="page-subtitle">检查新版本，下载后自动校验签名并升级</p>
 
         <div className="card" style={{ marginTop: 18 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
@@ -142,55 +150,68 @@ export function UpdatePage({ onNotice }: Props) {
           </div>
 
           <div className="row" style={{ marginTop: 16 }}>
-            <button type="button" className="primary-btn" onClick={() => void check()} disabled={phase === "checking"}>
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => void check()}
+              disabled={phase === "checking" || phase === "downloading" || !supported}
+            >
               {phase === "checking" ? "检查中…" : "检查更新"}
             </button>
             <span className="caption">
-              {phase === "checking" ? "正在连接更新服务…" : checkedAt ? `上次检查：${checkedAt}` : "尚未检查"}
+              {phase === "checking"
+                ? "正在获取更新清单…"
+                : checkedAt
+                  ? `上次检查：${checkedAt}`
+                  : "尚未检查"}
             </span>
           </div>
 
           {error && (
             <div className="update-notes" style={{ marginTop: 14 }}>
               {error}
-              {"\n"}请确认服务器地址已配置且可访问。
+              {"\n"}请检查网络连接，或确认更新服务器地址已发布最新清单。
             </div>
           )}
 
           {result && !error && (
             <div className="update-notes" style={{ marginTop: 14 }}>
-              {result.message}
-              {!result.configured && <>{"\n"}到「系统设置 → 服务器」填入地址后再试。</>}
-              {result.available && (
-                <>
-                  {"\n"}
-                  新版本 {result.latest} · 安装包 {formatSize(result.sizeBytes)}
-                  {result.notes ? ` \n ${result.notes}` : ""}
-                </>
-              )}
+              {result.available
+                ? `发现新版本 ${result.version}（当前 ${result.currentVersion}）`
+                : `当前已是最新版本 ${result.currentVersion}`}
+              {result.available && result.notes ? `\n${result.notes}` : ""}
             </div>
           )}
 
-          {result?.available && (
+          {result?.available && !error && (
             <div className="row" style={{ marginTop: 12, gap: 8 }}>
-              {phase !== "downloaded" ? (
-                <button type="button" className="primary-btn" onClick={() => void download()} disabled={phase === "downloading"}>
-                  {phase === "downloading" ? "下载中…" : "下载安装包"}
+              {phase === "installed" ? (
+                <button type="button" className="primary-btn" onClick={() => void restart()}>
+                  立即重启
                 </button>
               ) : (
-                <button type="button" className="primary-btn" onClick={() => void install()}>
-                  安装并重启
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => void install()}
+                  disabled={phase === "downloading"}
+                >
+                  {phase === "downloading" ? "下载并安装中…" : "下载并安装"}
                 </button>
               )}
               <span className="caption">
-                {phase === "downloaded" ? "安装包已通过 SHA-256 校验" : "下载后会先校验完整性再允许安装"}
+                {phase === "downloading"
+                  ? `${percent ? `${percent}% · ` : ""}已下载 ${formatSize(downloaded)}${total ? ` / ${formatSize(total)}` : ""}`
+                  : phase === "installed"
+                    ? "安装完成，重启后使用新版本"
+                    : "下载完成后自动校验签名，不再需要手动运行安装包"}
               </span>
             </div>
           )}
 
           <p className="caption" style={{ marginTop: 12 }}>
-            当前版本没有代码签名，安装时 Windows 可能提示 SmartScreen；
-            签名与静默自动升级仍在开发中。
+            更新包使用 minisign 签名校验，篡改或来源不明的安装包会被拒绝。
+            若发布方尚未配置 Windows 代码签名证书，首次安装仍可能被 SmartScreen 提示。
           </p>
         </div>
 

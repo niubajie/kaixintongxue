@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,28 @@ type App struct {
 	root        string
 	dataDir     string
 	store       *Store
+	// 定时搜索的运行态（phase 字符串），只在内存里，重启即清空。
+	scheduleRuns sync.Map
+	// 定时搜索的取消函数：暂停时调 cancel() 可立即打断正在进行的 HTTP 下载。
+	scheduleCancels sync.Map
+	// 自动修复后的待处理事项（需要登录 / 修复失败），任务结束后仍保留给前端处理。
+	scheduleIssues sync.Map
+	// 修复向导在站内找到的可下载结果，恢复任务时优先消费，避免再次走失效搜索路径。
+	scheduleAssistResults sync.Map
+	// 全流程下载监督：记录当前正在处理的网站，异常时据此进入修复。
+	scheduleCurrentSite sync.Map // scheduleID -> siteID
+	// 本轮下载预算的指针，监督程序据此判断是否还有下载空间。
+	scheduleBudget sync.Map // scheduleID -> *downloadBudget
+	// 每次运行 / 每次手动重试都自增，前端用它区分“同一条错误的新一轮”，避免去重导致不再弹修复。
+	scheduleRunNonce sync.Map // scheduleID -> int
+	// 监督程序发现下载停滞时置位，runScheduleSite 在循环里主动让出进入修复。
+	scheduleRepairRequested sync.Map // scheduleID -> bool
+	// 监督程序记录最近一次有进展的时间，用来判断停滞。
+	scheduleLastProgress sync.Map // scheduleID -> progressStamp
+	// 修复向导产出结果后关闭此通道，runScheduleSite 的等待循环被唤醒去消费结果。
+	scheduleAssistWait sync.Map // assistKey -> chan struct{}
+	// 同一任务连续自动重开修复向导的次数，达到上限后判定放弃，避免无限弹窗。
+	scheduleAssistReopens sync.Map // scheduleID -> int
 }
 
 func main() {
@@ -59,6 +82,8 @@ func main() {
 	} else {
 		defer store.Close()
 		app.store = store
+		// 把已保存的站点登录态读进内存，正文抓取时直接带上 Cookie。
+		app.loadSiteCookies(context.Background())
 		log.Printf("本地库就绪: %s", filepath.Join(dataDir, "app.db"))
 	}
 
@@ -72,6 +97,7 @@ func main() {
 	mux.HandleFunc("POST /api/data/move", app.handleDataMove)
 	mux.HandleFunc("GET /api/library/scan", app.handleLibraryScan)
 	mux.HandleFunc("POST /api/library/open", app.handleLibraryOpen)
+	mux.HandleFunc("POST /api/library/open-url", app.handleLibraryOpenURL)
 	mux.HandleFunc("POST /api/library/open-folder", app.handleLibraryOpenFolder)
 	mux.HandleFunc("POST /api/library/set-dir", app.handleLibrarySetDir)
 	mux.HandleFunc("GET /api/library/taxonomy", app.handleLibraryTaxonomy)
@@ -83,8 +109,22 @@ func main() {
 	mux.HandleFunc("POST /api/library/schedules", app.handleScheduleSave)
 	mux.HandleFunc("GET /api/library/sites", app.handleSiteList)
 	mux.HandleFunc("POST /api/library/sites", app.handleSiteSave)
+	mux.HandleFunc("POST /api/library/sites/verify", app.handleSiteVerify)
+	mux.HandleFunc("POST /api/library/sites/login", app.handleSiteLogin)
+	mux.HandleFunc("GET /api/library/sites/login/status", app.handleSiteLoginStatus)
+	mux.HandleFunc("POST /api/library/sites/login/finish", app.handleSiteLoginFinish)
+	mux.HandleFunc("POST /api/library/sites/assist/start", app.handleSiteAssistStart)
+	mux.HandleFunc("GET /api/library/sites/assist/status", app.handleSiteAssistStatus)
+	mux.HandleFunc("POST /api/library/sites/assist/open", app.handleSiteAssistOpen)
+	mux.HandleFunc("POST /api/library/sites/assist/search-entry", app.handleSiteAssistEntry)
+	mux.HandleFunc("POST /api/library/sites/assist/search-url", app.handleSiteAssistSearchURL)
+	mux.HandleFunc("POST /api/library/sites/assist/login-confirm", app.handleSiteAssistLoginConfirm)
+	mux.HandleFunc("POST /api/library/sites/assist/login", app.handleSiteAssistLogin)
+	mux.HandleFunc("POST /api/library/sites/assist/retry", app.handleSiteAssistRetry)
+	mux.HandleFunc("POST /api/library/sites/assist/cancel", app.handleSiteAssistCancel)
 	mux.HandleFunc("DELETE /api/library/sites/{id}", app.handleSiteDelete)
 	mux.HandleFunc("DELETE /api/library/schedules/{id}", app.handleScheduleDelete)
+	mux.HandleFunc("POST /api/library/schedules/{id}/enabled", app.handleScheduleEnabled)
 	mux.HandleFunc("POST /api/kb/index", app.handleKBIndex)
 	mux.HandleFunc("POST /api/kb/remove", app.handleKBRemove)
 	mux.HandleFunc("GET /api/kb/status", app.handleKBStatus)
@@ -120,9 +160,6 @@ func main() {
 	mux.HandleFunc("POST /api/account/logout", app.handleAccountLogout)
 	mux.HandleFunc("POST /api/account/wechat/start", app.handleWechatStartProxy)
 	mux.HandleFunc("GET /api/account/wechat/poll", app.handleWechatPollProxy)
-	mux.HandleFunc("GET /api/skills/custom", app.handleListCustomSkills)
-	mux.HandleFunc("POST /api/skills/custom", app.handleSaveCustomSkill)
-	mux.HandleFunc("DELETE /api/skills/custom/{id}", app.handleDeleteCustomSkill)
 
 	// 显式设置超时：ListenAndServe 默认无 ReadHeaderTimeout，慢连接会一直占着 goroutine。
 	server := &http.Server{
